@@ -1,92 +1,65 @@
-"use client";
-import { useState } from "react";
+import Link from "next/link";
 
-const categories = ["Gastronomía", "Remeras y Jeans", "Relojes", "Zapatos", "Ropa Interior"];
-
-export default function RegistroPage() {
-  const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ name: "", category: "", email: "", whatsapp: "" });
-
-  const next = () => setStep((s) => Math.min(s + 1, 4));
-  const prev = () => setStep((s) => Math.max(s - 1, 1));
-
+export default function Home() {
   return (
-    <div className="min-h-screen pt-24 px-4 max-w-xl mx-auto">
-      <div className="mb-8">
-        <div className="flex justify-between mb-2 text-sm text-slate-500">
-          <span>Paso {step} de 4</span>
-        </div>
-        <div className="h-2 bg-slate-200 rounded-full">
-          <div className="h-2 bg-emerald-600 rounded-full transition-all" style={{ width: `${step * 25}%` }} />
-        </div>
-      </div>
-
-      {step === 1 && (
-        <div className="space-y-4">
-          <h1 className="text-2xl font-bold">Datos de tu negocio</h1>
-          <input
-            className="w-full border rounded-lg p-3"
-            placeholder="Nombre de tu tienda"
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-          />
-          <select
-            className="w-full border rounded-lg p-3"
-            value={form.category}
-            onChange={(e) => setForm({ ...form, category: e.target.value })}
-          >
-            <option value="">Elegí una categoría</option>
-            {categories.map((c) => <option key={c}>{c}</option>)}
-          </select>
-        </div>
-      )}
-
-      {step === 2 && (
-        <div className="space-y-4">
-          <h1 className="text-2xl font-bold">Datos de contacto</h1>
-          <input className="w-full border rounded-lg p-3" placeholder="Email" type="email"
-            value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-          <input className="w-full border rounded-lg p-3" placeholder="WhatsApp"
-            value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} />
-        </div>
-      )}
-
-      {step === 3 && (
-        <div className="space-y-4">
-          <h1 className="text-2xl font-bold">Elegí tu diseño</h1>
-          <p className="text-slate-600">Templates según tu categoría: <b>{form.category}</b></p>
-          <div className="grid grid-cols-2 gap-3">
-            {[1, 2, 3, 4].map((t) => (
-              <div key={t} className="border-2 rounded-xl h-32 flex items-center justify-center hover:border-emerald-500 cursor-pointer">
-                Template {t}
-              </div>
-            ))}
+    <main className="min-h-screen bg-[#0f1115] text-slate-200 font-sans selection:bg-emerald-500/30">
+      
+      {/* Navbar */}
+      <nav className="fixed top-0 w-full bg-[#0f1115]/80 backdrop-blur-md border-b border-slate-800/50 z-50">
+        <div className="max-w-6xl mx-auto px-4 h-16 flex items-center justify-between">
+          <Link href="/" className="font-bold text-2xl tracking-tighter text-white">ARAE</Link>
+          <div className="hidden md:flex gap-6 items-center text-sm font-medium text-slate-400">
+            <a href="#precios" className="hover:text-white transition">Precios</a>
+            <Link href="/registro" className="bg-emerald-500 text-black px-5 py-2.5 rounded-lg font-semibold hover:bg-emerald-400 transition">
+              Crear tienda
+            </Link>
           </div>
         </div>
-      )}
+      </nav>
 
-      {step === 4 && (
-        <div className="space-y-4">
-          <h1 className="text-2xl font-bold">¡Todo listo! 🎉</h1>
-          <p className="text-slate-600">
-            Tu tienda <b>{form.name}</b> de categoría <b>{form.category}</b> está lista para crearse.
+      {/* Hero Principal */}
+      <section className="pt-40 pb-24 px-4 text-center">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-8 text-white">
+            ¿Listo para vender online?
+          </h1>
+          <p className="text-lg md:text-2xl text-slate-400 mb-12 max-w-2xl mx-auto">
+            Creá tu tienda en minutos. Gastronomía, moda, accesorios y más en un solo lugar, con diseños diseñados para convertir.
           </p>
-          <div className="bg-slate-50 p-4 rounded-lg text-sm space-y-1">
-            <p>📧 {form.email}</p>
-            <p>📱 {form.whatsapp}</p>
-            <p>🔗 tiendafacil.com/t/{form.name.toLowerCase().replace(/\s/g, "-")}</p>
+          <Link 
+            href="/registro" 
+            className="inline-flex items-center justify-center bg-emerald-500 text-black px-10 py-4 rounded-xl font-bold text-lg hover:bg-emerald-400 transition-all transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(16,185,129,0.4)]"
+          >
+            Crear mi tienda gratis →
+          </Link>
+        </div>
+      </section>
+
+      {/* Features rápidas */}
+      <section className="py-24 px-4 border-t border-slate-800/50">
+        <div className="max-w-6xl mx-auto grid md:grid-cols-3 gap-8">
+          <div className="text-center">
+            <div className="w-14 h-14 bg-slate-800/50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-2xl border border-slate-700/50">⚡</div>
+            <h3 className="text-xl font-bold text-white mb-3">Rápido y fácil</h3>
+            <p className="text-slate-400">Configurá tu tienda en menos de 5 minutos con nuestro formulario inteligente.</p>
+          </div>
+          <div className="text-center">
+            <div className="w-14 h-14 bg-slate-800/50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-2xl border border-slate-700/50">🎨</div>
+            <h3 className="text-xl font-bold text-white mb-3">Diseños Premium</h3>
+            <p className="text-slate-400">Elegí entre plantillas exclusivas diseñadas por expertos para cada rubro.</p>
+          </div>
+          <div className="text-center">
+            <div className="w-14 h-14 bg-slate-800/50 rounded-2xl flex items-center justify-center mx-auto mb-6 text-2xl border border-slate-700/50">📊</div>
+            <h3 className="text-xl font-bold text-white mb-3">Analíticas en Vivo</h3>
+            <p className="text-slate-400">Mirá cuántas personas visitan tu tienda y cuáles son los productos más vistos.</p>
           </div>
         </div>
-      )}
+      </section>
 
-      <div className="flex gap-3 mt-8">
-        {step > 1 && <button onClick={prev} className="flex-1 border py-3 rounded-lg">Atrás</button>}
-        {step < 4 ? (
-          <button onClick={next} className="flex-1 bg-black text-white py-3 rounded-lg">Continuar</button>
-        ) : (
-          <button className="flex-1 bg-emerald-600 text-white py-3 rounded-lg font-medium">Crear mi tienda</button>
-        )}
-      </div>
-    </div>
+      {/* Footer */}
+      <footer className="py-10 px-4 border-t border-slate-800/50 text-center text-slate-500 text-sm">
+        <p>© 2026 ARAE. Todos los derechos reservados.</p>
+      </footer>
+    </main>
   );
 }
