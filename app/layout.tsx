@@ -1,12 +1,13 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import GoogleCaptchaWrapper from "./google-captcha-wrapper";
 
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "TiendaFácil — Creá tu tienda online en minutos",
-  description: "Plataforma para crear tiendas gastronómicas, de ropa, relojes y más.",
+  title: "ARAE — Tu tienda online en minutos",
+  description: "Creá tu tienda sin saber programar.",
 };
 
 export default function RootLayout({
@@ -14,8 +15,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es">
-      <body className={`${inter.className} bg-white text-slate-900 antialiased`}>
-        {children}
+      <body className={`${inter.className} bg-[#0f1115] text-slate-200 antialiased`}>
+        <GoogleCaptchaWrapper>
+          {children}
+        </GoogleCaptchaWrapper>
       </body>
     </html>
   );

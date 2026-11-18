@@ -1,7 +1,8 @@
 "use client";
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase"; // Importamos Supabase directo
+import { supabase } from "@/lib/supabase";
+import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 const categories = ["Gastronomía", "Remeras y Jeans", "Relojes", "Zapatos", "Ropa Interior"];
 
@@ -72,6 +73,9 @@ export default function RegistroPage() {
   const [step, setStep] = useState(1);
   const [form, setForm] = useState({ name: "", category: "", email: "", password: "", countryCode: "+54", countryIso: "AR", whatsapp: "", template: "" });
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Hook de reCAPTCHA
+  const { executeRecaptcha } = useGoogleReCaptcha();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -339,8 +343,14 @@ export default function RegistroPage() {
               type="button"
               disabled={isLoading}
               onClick={async () => {
+                if (!executeRecaptcha) {
+                  alert("El sistema de seguridad no está listo. Esperá un segundo.");
+                  return;
+                }
+
                 setIsLoading(true);
                 try {
+                  const token = await executeRecaptcha("registro_tienda");
                   const slug = form.name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
                   
                   // 1. Registrar en Supabase
@@ -355,7 +365,7 @@ export default function RegistroPage() {
                     return;
                   }
 
-                  // 2. Guardar tienda en Prisma
+                  // 2. Guardar tienda en Prisma (con token reCAPTCHA)
                   const res = await fetch('/api/stores', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -365,12 +375,14 @@ export default function RegistroPage() {
                       category: form.category,
                       template: form.template,
                       email: form.email,
-                      whatsapp: `${form.countryCode} ${form.whatsapp}`
+                      whatsapp: `${form.countryCode} ${form.whatsapp}`,
+                      recaptchaToken: token
                     })
                   });
 
                   if (!res.ok) {
-                    alert("Error al guardar la tienda.");
+                    const errorData = await res.json();
+                    alert(errorData.error || "Error al guardar la tienda.");
                     setIsLoading(false);
                     return;
                   }

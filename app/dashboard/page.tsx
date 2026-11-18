@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { supabase } from "@/lib/supabase"; // Asegurate de que esta ruta sea correcta
+import { supabase } from "@/lib/supabase";
 
 export default function DashboardPage() {
   const [store, setStore] = useState<any>(null);
@@ -13,29 +13,32 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const checkUserAndFetchStore = async () => {
-      // 1. Verificamos la sesión con Supabase
       const { data: { session } } = await supabase.auth.getSession();
 
       if (!session) {
-        // Si no hay sesión, lo mandamos al login
         window.location.href = "/login";
         return;
       }
 
-      // 2. Si hay sesión, buscamos la tienda guardada
-      const slug = localStorage.getItem("currentStoreSlug");
-      
-      if (!slug) {
-        // Si no hay slug, significa que no creó tienda aún o borró el localStorage
-        setLoading(false);
+      // --- LÓGICA DE PRUEBA GRATIS (7 DÍAS) ---
+      const userCreatedAt = new Date(session.user.created_at);
+      const today = new Date();
+      const diffInDays = Math.floor((today.getTime() - userCreatedAt.getTime()) / (1000 * 3600 * 24));
+
+      if (diffInDays > 7) {
+        window.location.href = "/upgrade"; 
         return;
       }
+      // ----------------------------------------
 
-      const res = await fetch(`/api/stores/${slug}`);
-      if (res.ok) {
-        const data = await res.json();
-        setStore(data);
-        setProducts(data.products || []);
+      const slug = localStorage.getItem("currentStoreSlug");
+      if (slug) {
+        const res = await fetch(`/api/stores/${slug}`);
+        if (res.ok) {
+          const data = await res.json();
+          setStore(data);
+          setProducts(data.products || []);
+        }
       }
       setLoading(false);
     };

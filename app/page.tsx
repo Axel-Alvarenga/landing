@@ -21,17 +21,25 @@ export default function Home() {
       <section className="pt-40 pb-24 px-4 text-center">
         <div className="max-w-4xl mx-auto">
           <h1 className="text-4xl md:text-6xl lg:text-7xl font-bold tracking-tight mb-8 text-white">
-            ¿Listo para vender online?
+            ¿Listo para escalar tu negocio <br className="hidden md:block" />
+            <span className="text-emerald-400">o emprendimiento?</span>
           </h1>
-          <p className="text-lg md:text-2xl text-slate-400 mb-12 max-w-2xl mx-auto">
-            Creá tu tienda en minutos. Gastronomía, moda, accesorios y más en un solo lugar, con diseños diseñados para convertir.
+          <p className="text-lg md:text-2xl text-slate-400 mb-10 max-w-2xl mx-auto">
+            Creá tu tienda en minutos, sin conocimientos en programación.
           </p>
-          <Link 
-            href="/registro" 
-            className="inline-flex items-center justify-center bg-emerald-500 text-black px-10 py-4 rounded-xl font-bold text-lg hover:bg-emerald-400 transition-all transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(16,185,129,0.4)]"
-          >
-            Crear mi tienda gratis →
-          </Link>
+          
+          <div className="flex flex-col items-center">
+            <Link 
+              href="/registro" 
+              className="inline-flex items-center justify-center bg-emerald-500 text-black px-10 py-4 rounded-xl font-bold text-lg hover:bg-emerald-400 transition-all transform hover:scale-105 shadow-[0_0_40px_-10px_rgba(16,185,129,0.4)]"
+            >
+              Prueba 7 días gratis →
+            </Link>
+            <p className="text-sm text-slate-500 mt-4 flex items-center gap-1.5">
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-500"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Sin tarjeta de crédito requerida
+            </p>
+          </div>
         </div>
       </section>
 
