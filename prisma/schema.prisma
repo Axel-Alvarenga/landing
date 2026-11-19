@@ -3,9 +3,11 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
+
 
 model Store {
   id        String    @id @default(cuid())
@@ -15,7 +17,8 @@ model Store {
   template  String
   email     String
   whatsapp  String
-  logoUrl   String?   // <-- TIENE QUE ESTAR ESTA LÍNEA
+  logoUrl   String?
+  userId    String?   // <-- NUEVO CAMPO
   products  Product[]
   createdAt DateTime  @default(now())
 }
@@ -26,7 +29,7 @@ model Product {
   price     Float
   stock     Int      @default(0)
   imageUrl  String?
-  category  String?  // <-- NUEVO CAMPO
+  category  String?
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())
