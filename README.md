@@ -1,36 +1,31 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# 🛍️ ARAE - Creador de Tiendas Online
 
-## Getting Started
+ARAE es una plataforma SaaS (Software as a Service) que permite a cualquier emprendedor crear su propia tienda online en minutos, sin necesidad de saber programar.
 
-First, run the development server:
+## ✨ Características Principales
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+- **Creación en 5 minutos:** Formulario multi-paso para configurar la tienda (nombre, categoría, contacto y diseño).
+- **20+ Templates:** Diseños exclusivos adaptados a 5 rubros (Gastronomía, Remeras, Relojes, Zapatos, Ropa Interior).
+- **Personalización:** Selector de diseño con vista previa en vivo (Preview) y subida de logo personalizado.
+- **Gestión de Productos (ABM):** Panel de control para agregar, editar y eliminar productos con imágenes (redimensionado automático a 800x800).
+- **Categorías dinámicas:** El dueño puede crear sus propias categorías (ej: "Buzos", "Ofertas") y el cliente final puede filtrar por ellas.
+- **Carrito de Compras:** Carrito lateral funcional que guarda el estado en el navegador y envía el pedido final por WhatsApp.
+- **Prueba gratuita:** Sistema de 7 días de prueba para nuevos usuarios.
+- **Seguridad:** Protección anti-bots con Google reCAPTCHA v3 en el registro.
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 🛠️ Stack Tecnológico
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+- **Frontend & Backend:** [Next.js 15](https://nextjs.org/) (App Router) + [React](https://react.dev/) + [TypeScript](https://www.typescriptlang.org/)
+- **Estilos:** [Tailwind CSS v4](https://tailwindcss.com/)
+- **Base de Datos:** [Prisma ORM](https://www.prisma.io/) + SQLite (Desarrollo) / PostgreSQL (Producción)
+- **Autenticación & Storage:** [Supabase](https://supabase.com/)
+- **Seguridad:** [Google reCAPTCHA v3](https://developers.google.com/recaptcha)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## 🚀 Empezar en local
 
-## Learn More
+Si querés correr este proyecto en tu computadora, seguí estos pasos:
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. **Clonar el repositorio:**
+   ```bash
+   git clone https://github.com/TU_USUARIO/TU_REPO.git
+   cd TU_REPO
