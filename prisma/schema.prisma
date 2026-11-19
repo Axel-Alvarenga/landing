@@ -15,6 +15,7 @@ model Store {
   template  String
   email     String
   whatsapp  String
+  logoUrl   String?   // <-- TIENE QUE ESTAR ESTA LÍNEA
   products  Product[]
   createdAt DateTime  @default(now())
 }
@@ -24,6 +25,8 @@ model Product {
   name      String
   price     Float
   stock     Int      @default(0)
+  imageUrl  String?
+  category  String?  // <-- NUEVO CAMPO
   storeId   String
   store     Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   createdAt DateTime @default(now())

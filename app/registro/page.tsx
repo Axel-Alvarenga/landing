@@ -74,7 +74,6 @@ export default function RegistroPage() {
   const [form, setForm] = useState({ name: "", category: "", email: "", password: "", countryCode: "+54", countryIso: "AR", whatsapp: "", template: "" });
   const [isLoading, setIsLoading] = useState(false);
   
-  // Hook de reCAPTCHA
   const { executeRecaptcha } = useGoogleReCaptcha();
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -353,7 +352,6 @@ export default function RegistroPage() {
                   const token = await executeRecaptcha("registro_tienda");
                   const slug = form.name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
                   
-                  // 1. Registrar en Supabase
                   const { error: authError } = await supabase.auth.signUp({
                     email: form.email,
                     password: form.password,
@@ -365,7 +363,6 @@ export default function RegistroPage() {
                     return;
                   }
 
-                  // 2. Guardar tienda en Prisma (con token reCAPTCHA)
                   const res = await fetch('/api/stores', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -401,6 +398,14 @@ export default function RegistroPage() {
             </button>
           )}
         </div>
+
+        {/* TEXTO LEGAL DE RECAPTCHA (Requerido por Google) */}
+        <p className="text-center text-xs text-slate-500 mt-6 max-w-md mx-auto">
+          Este sitio está protegido por reCAPTCHA y se aplican la{" "}
+          <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer" className="underline hover:text-slate-300">Política de Privacidad</a> y los{" "}
+          <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer" className="underline hover:text-slate-300">Términos de Servicio</a> de Google.
+        </p>
+
       </div>
     </div>
   );
