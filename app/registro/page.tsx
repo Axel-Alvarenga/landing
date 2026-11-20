@@ -1,4 +1,6 @@
+
 "use client";
+
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { supabase } from "@/lib/supabase";
@@ -7,19 +9,29 @@ import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 const categories = ["Gastronomía", "Remeras y Jeans", "Relojes", "Zapatos", "Ropa Interior"];
 
 const countries = [
-  { code: "AR", dial: "+54", name: "Argentina" }, { code: "BO", dial: "+591", name: "Bolivia" },
-  { code: "CL", dial: "+56", name: "Chile" }, { code: "CO", dial: "+57", name: "Colombia" },
-  { code: "CR", dial: "+506", name: "Costa Rica" }, { code: "CU", dial: "+53", name: "Cuba" },
-  { code: "EC", dial: "+593", name: "Ecuador" }, { code: "SV", dial: "+503", name: "El Salvador" },
-  { code: "ES", dial: "+34", name: "España" }, { code: "US", dial: "+1", name: "Estados Unidos" },
-  { code: "GT", dial: "+502", name: "Guatemala" }, { code: "HN", dial: "+504", name: "Honduras" },
-  { code: "MX", dial: "+52", name: "México" }, { code: "NI", dial: "+505", name: "Nicaragua" },
-  { code: "PA", dial: "+507", name: "Panamá" }, { code: "PY", dial: "+595", name: "Paraguay" },
-  { code: "PE", dial: "+51", name: "Perú" }, { code: "DO", dial: "+1", name: "Rep. Dominicana" },
-  { code: "UY", dial: "+598", name: "Uruguay" }, { code: "VE", dial: "+58", name: "Venezuela" },
+  { code: "AR", dial: "+54", name: "Argentina" },
+  { code: "BO", dial: "+591", name: "Bolivia" },
+  { code: "CL", dial: "+56", name: "Chile" },
+  { code: "CO", dial: "+57", name: "Colombia" },
+  { code: "CR", dial: "+506", name: "Costa Rica" },
+  { code: "CU", dial: "+53", name: "Cuba" },
+  { code: "EC", dial: "+593", name: "Ecuador" },
+  { code: "SV", dial: "+503", name: "El Salvador" },
+  { code: "ES", dial: "+34", name: "España" },
+  { code: "US", dial: "+1", name: "Estados Unidos" },
+  { code: "GT", dial: "+502", name: "Guatemala" },
+  { code: "HN", dial: "+504", name: "Honduras" },
+  { code: "MX", dial: "+52", name: "México" },
+  { code: "NI", dial: "+505", name: "Nicaragua" },
+  { code: "PA", dial: "+507", name: "Panamá" },
+  { code: "PY", dial: "+595", name: "Paraguay" },
+  { code: "PE", dial: "+51", name: "Perú" },
+  { code: "DO", dial: "+1", name: "Rep. Dominicana" },
+  { code: "UY", dial: "+598", name: "Uruguay" },
+  { code: "VE", dial: "+58", name: "Venezuela" },
 ];
 
-const templatesData: Record<string, { id: string, name: string, color: string, textColor: string }[]> = {
+const templatesData: Record<string, { id: string; name: string; color: string; textColor: string }[]> = {
   "Gastronomía": [
     { id: "g1", name: "Menú Oscuro", color: "bg-zinc-900", textColor: "text-amber-400" },
     { id: "g2", name: "Orgánico", color: "bg-emerald-50", textColor: "text-emerald-800" },
@@ -49,7 +61,7 @@ const templatesData: Record<string, { id: string, name: string, color: string, t
     { id: "ri2", name: "Básicos", color: "bg-slate-100", textColor: "text-slate-600" },
     { id: "ri3", name: "Seducción", color: "bg-black", textColor: "text-rose-500" },
     { id: "ri4", name: "Deportivo", color: "bg-teal-600", textColor: "text-white" },
-  ]
+  ],
 };
 
 const defaultTemplates = [
@@ -61,46 +73,91 @@ const defaultTemplates = [
 
 export default function RegistroPage() {
   const [step, setStep] = useState(1);
-  const [form, setForm] = useState({ name: "", category: "", email: "", password: "", countryCode: "+54", countryIso: "AR", whatsapp: "", template: "" });
+
+  const [form, setForm] = useState({
+    name: "",
+    category: "",
+    email: "",
+    password: "",
+    countryCode: "+54",
+    countryIso: "AR",
+    whatsapp: "",
+    template: "",
+  });
+
   const [isLoading, setIsLoading] = useState(false);
   const { executeRecaptcha } = useGoogleReCaptcha();
+
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) setIsDropdownOpen(false);
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setIsDropdownOpen(false);
+      }
     }
+
     document.addEventListener("mousedown", handleClickOutside);
+
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const filteredCountries = countries.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()) || c.dial.includes(searchQuery));
+  const filteredCountries = countries.filter(
+    (c) =>
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.dial.includes(searchQuery)
+  );
+
   const handleSelectCountry = (country: typeof countries[0]) => {
-    setForm({ ...form, countryCode: country.dial, countryIso: country.code });
-    setSearchQuery(""); setIsDropdownOpen(false);
+    setForm({
+      ...form,
+      countryCode: country.dial,
+      countryIso: country.code,
+    });
+
+    setSearchQuery("");
+    setIsDropdownOpen(false);
   };
 
   const isEmailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email);
   const isEmailInvalid = form.email.length > 0 && !isEmailValid;
+
   const isStep1Valid = form.name.trim().length > 2 && form.category !== "";
-  const isStep2Valid = isEmailValid && form.password.length >= 6 && form.whatsapp.trim().length >= 6;
+  const isStep2Valid =
+    isEmailValid &&
+    form.password.length >= 6 &&
+    form.whatsapp.trim().length >= 6;
+
   const isStep3Valid = form.template !== "";
 
   const handleNext = () => {
     if (step === 1 && !isStep1Valid) return;
     if (step === 2 && !isStep2Valid) return;
     if (step === 3 && !isStep3Valid) return;
+
     setStep((s) => Math.min(s + 1, 4));
   };
+
   const prev = () => setStep((s) => Math.max(s - 1, 1));
 
-  const currentTemplates = form.category ? (templatesData[form.category] || defaultTemplates) : defaultTemplates;
-  const currentCountryFlag = countries.find(c => c.code === form.countryIso);
-  const emailInputClass = `w-full bg-[#15181e] border rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition ${isEmailInvalid ? "border-red-500 focus:ring-red-500" : "border-slate-700 focus:ring-emerald-500"}`;
+  const currentTemplates = form.category
+    ? templatesData[form.category] || defaultTemplates
+    : defaultTemplates;
 
-  // --- LÓGICA DE CREACIÓN CON LOGIN FORZADO ---
+  const currentCountryFlag = countries.find(
+    (c) => c.code === form.countryIso
+  );
+
+  const emailInputClass = `w-full bg-[#15181e] border rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 transition ${
+    isEmailInvalid
+      ? "border-red-500 focus:ring-red-500"
+      : "border-slate-700 focus:ring-emerald-500"
+  }`;
+
+  // CREACIÓN DE TIENDA
   const handleCreateStore = async () => {
     if (!executeRecaptcha) {
       alert("El sistema de seguridad no está listo. Esperá un segundo.");
@@ -108,15 +165,27 @@ export default function RegistroPage() {
     }
 
     setIsLoading(true);
+
     try {
       const token = await executeRecaptcha("registro_tienda");
-      const slug = form.name.toLowerCase().trim().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      
-      // 1. Cerramos cualquier sesión previa
+
+      const slug = form.name
+        .toLowerCase()
+        .trim()
+        .replace(/\s+/g, "-")
+        .replace(/[^a-z0-9-]/g, "");
+
+      if (!slug) {
+        alert("El nombre de la tienda no es válido.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 1. Cerramos cualquier sesión anterior.
       await supabase.auth.signOut();
 
-      // 2. Registramos el usuario
-      const { data: authData, error: authError } = await supabase.auth.signUp({
+      // 2. Creamos la cuenta.
+      const { error: authError } = await supabase.auth.signUp({
         email: form.email,
         password: form.password,
       });
@@ -127,48 +196,77 @@ export default function RegistroPage() {
         return;
       }
 
-      // 3. FORZAMOS EL LOGIN (Esto asegura que la sesión se guarde en el navegador)
-      const { error: loginError } = await supabase.auth.signInWithPassword({
-        email: form.email,
-        password: form.password,
-      });
+      // 3. Iniciamos sesión.
+      const { error: loginError } =
+        await supabase.auth.signInWithPassword({
+          email: form.email,
+          password: form.password,
+        });
 
       if (loginError) {
-        alert("Cuenta creada, pero error al iniciar sesión. Andá al login manualmente.");
+        alert(
+          "Cuenta creada, pero no se pudo iniciar sesión: " +
+            loginError.message
+        );
         setIsLoading(false);
         return;
       }
 
-      // 4. Creamos la tienda en la base de datos
-      const res = await fetch('/api/stores', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      // 4. Obtenemos el token de acceso.
+      const { data: sessionData, error: sessionError } =
+        await supabase.auth.getSession();
+
+      const accessToken = sessionData.session?.access_token;
+
+      if (sessionError || !accessToken) {
+        alert("No se pudo obtener la sesión. Volvé a iniciar sesión.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 5. Creamos la tienda en el servidor.
+      const res = await fetch("/api/stores", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
         body: JSON.stringify({
-          slug, 
-          name: form.name, 
-          category: form.category, 
-          template: form.template, 
-          email: form.email, 
+          slug,
+          name: form.name,
+          category: form.category,
+          template: form.template,
+          email: form.email,
           whatsapp: `${form.countryCode} ${form.whatsapp}`,
-          userId: authData.user?.id,
-          recaptchaToken: token
-        })
+          recaptchaToken: token,
+        }),
       });
 
+      const responseData = await res.json();
+
       if (!res.ok) {
-        const errorData = await res.json();
-        alert(errorData.error || "Error al guardar la tienda.");
+        alert(responseData.error || "Error al guardar la tienda.");
         setIsLoading(false);
         return;
       }
 
-      // 5. Guardamos el slug y redirigimos
-      localStorage.setItem("currentStoreSlug", slug);
-      window.location.href = `/dashboard`;
-      
+      // 6. Verificamos que el servidor haya devuelto una tienda.
+      if (!responseData || !responseData.id || !responseData.slug) {
+        console.error("Respuesta inesperada del servidor:", responseData);
+        alert("La tienda se creó, pero el servidor devolvió datos incompletos. Contactá con soporte.");
+        setIsLoading(false);
+        return;
+      }
+
+      // 7. Guardamos el slug devuelto por la base de datos.
+      localStorage.setItem("currentStoreSlug", responseData.slug);
+
+      // 8. Redirigimos al Dashboard.
+      window.location.href = "/dashboard";
+
     } catch (error) {
-      console.error(error);
-      alert("Hubo un error inesperado.");
+      console.error("Error al crear tienda:", error);
+      alert("Hubo un error inesperado al crear la tienda.");
       setIsLoading(false);
     }
   };
@@ -176,12 +274,23 @@ export default function RegistroPage() {
   return (
     <div className="min-h-screen bg-[#0f1115] text-slate-200 font-sans selection:bg-emerald-500/30 pt-24 px-4 pb-12">
       <div className="max-w-xl mx-auto">
-        <Link href="/" className="text-sm text-slate-500 hover:text-emerald-400 transition mb-8 inline-block">← Volver al inicio</Link>
+        <Link
+          href="/"
+          className="text-sm text-slate-500 hover:text-emerald-400 transition mb-8 inline-block"
+        >
+          ← Volver al inicio
+        </Link>
 
         <div className="mb-8">
-          <div className="flex justify-between mb-2 text-sm font-medium text-slate-400"><span>Paso {step} de 4</span></div>
+          <div className="flex justify-between mb-2 text-sm font-medium text-slate-400">
+            <span>Paso {step} de 4</span>
+          </div>
+
           <div className="h-2 bg-slate-800 rounded-full overflow-hidden border border-slate-700/50">
-            <div className="h-2 bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${step * 25}%` }} />
+            <div
+              className="h-2 bg-emerald-500 rounded-full transition-all duration-300"
+              style={{ width: `${step * 25}%` }}
+            />
           </div>
         </div>
 
@@ -189,10 +298,23 @@ export default function RegistroPage() {
           <div className="space-y-5">
             <h1 className="text-3xl font-bold text-white">Datos de tu negocio</h1>
             <p className="text-slate-400">Empecemos con lo básico.</p>
-            <input className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Nombre de tu tienda" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            <select className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none" value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+
+            <input
+              className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Nombre de tu tienda"
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+            />
+
+            <select
+              className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
+              value={form.category}
+              onChange={(e) => setForm({ ...form, category: e.target.value })}
+            >
               <option value="">Elegí una categoría</option>
-              {categories.map((c) => <option key={c} value={c}>{c}</option>)}
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
             </select>
           </div>
         )}
@@ -200,33 +322,90 @@ export default function RegistroPage() {
         {step === 2 && (
           <div className="space-y-5">
             <h1 className="text-3xl font-bold text-white">Datos de contacto</h1>
+
             <div>
-              <input className={emailInputClass} placeholder="Email" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-              {isEmailInvalid && <p className="text-red-500 text-xs mt-1.5 ml-1">Email inválido.</p>}
+              <input
+                className={emailInputClass}
+                placeholder="Email"
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+              />
+
+              {isEmailInvalid && (
+                <p className="text-red-500 text-xs mt-1.5 ml-1">Email inválido.</p>
+              )}
             </div>
-            <input className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500" placeholder="Contraseña (min. 6)" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+
+            <input
+              className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Contraseña (min. 6)"
+              type="password"
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+            />
+
             <div className="flex gap-2">
               <div className="relative w-32 shrink-0" ref={dropdownRef}>
-                <button type="button" onClick={() => setIsDropdownOpen(!isDropdownOpen)} className="w-full h-full flex items-center justify-between bg-[#15181e] border border-slate-700 rounded-lg py-3 px-3 text-white">
+                <button
+                  type="button"
+                  onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                  className="w-full h-full flex items-center justify-between bg-[#15181e] border border-slate-700 rounded-lg py-3 px-3 text-white"
+                >
                   <div className="flex items-center gap-2">
-                    {currentCountryFlag && <img src={`https://flagcdn.com/w20/${currentCountryFlag.code.toLowerCase()}.png`} className="w-5 rounded-sm" />}
+                    {currentCountryFlag && (
+                      <img
+                        src={`https://flagcdn.com/w20/${currentCountryFlag.code.toLowerCase()}.png`}
+                        className="w-5 rounded-sm"
+                        alt={currentCountryFlag.name}
+                      />
+                    )}
                     <span className="text-sm font-medium">{form.countryCode}</span>
-                  </div><span className="text-slate-500 text-[10px]">▼</span>
+                  </div>
+                  <span className="text-slate-500 text-[10px]">▼</span>
                 </button>
+
                 {isDropdownOpen && (
                   <div className="absolute top-full left-0 mt-2 w-64 bg-[#15181e] border border-slate-700 rounded-lg shadow-xl z-50">
-                    <div className="p-2 border-b border-slate-700"><input type="text" autoFocus placeholder="Buscar..." className="w-full bg-[#0f1115] border border-slate-700 rounded-md p-2 text-sm text-white" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} /></div>
+                    <div className="p-2 border-b border-slate-700">
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="Buscar..."
+                        className="w-full bg-[#0f1115] border border-slate-700 rounded-md p-2 text-sm text-white"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+
                     <div className="max-h-60 overflow-y-auto">
                       {filteredCountries.map((c) => (
-                        <button key={c.code} type="button" onClick={() => handleSelectCountry(c)} className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[#1a1e26] text-left">
-                          <img src={`https://flagcdn.com/w20/${c.code.toLowerCase()}.png`} className="w-5 rounded-sm" /><span className="text-sm flex-1">{c.name}</span><span className="text-xs text-slate-500">{c.dial}</span>
+                        <button
+                          key={c.code}
+                          type="button"
+                          onClick={() => handleSelectCountry(c)}
+                          className="w-full flex items-center gap-3 px-3 py-2 hover:bg-[#1a1e26] text-left"
+                        >
+                          <img
+                            src={`https://flagcdn.com/w20/${c.code.toLowerCase()}.png`}
+                            className="w-5 rounded-sm"
+                            alt={c.name}
+                          />
+                          <span className="text-sm flex-1">{c.name}</span>
+                          <span className="text-xs text-slate-500">{c.dial}</span>
                         </button>
                       ))}
                     </div>
                   </div>
                 )}
               </div>
-              <input className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500" placeholder="Número de WhatsApp" value={form.whatsapp} onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} />
+
+              <input
+                className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500"
+                placeholder="Número de WhatsApp"
+                value={form.whatsapp}
+                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+              />
             </div>
           </div>
         )}
@@ -234,16 +413,49 @@ export default function RegistroPage() {
         {step === 3 && (
           <div className="space-y-5">
             <h1 className="text-3xl font-bold text-white">Elegí tu diseño</h1>
-            <p className="text-slate-400">Templates para: <b className="text-emerald-400">{form.category || "Tu categoría"}</b></p>
+
+            <p className="text-slate-400">
+              Templates para:{" "}
+              <b className="text-emerald-400">{form.category || "Tu categoría"}</b>
+            </p>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {currentTemplates.map((t) => (
-                <button key={t.id} type="button" onClick={() => setForm({ ...form, template: t.id })} className={`relative w-full text-left border-2 rounded-xl overflow-hidden transition-all ${form.template === t.id ? "border-emerald-500 bg-[#1a1e26]" : "border-slate-700 hover:border-slate-500 bg-[#15181e]"}`}>
+                <button
+                  key={t.id}
+                  type="button"
+                  onClick={() => setForm({ ...form, template: t.id })}
+                  className={`relative w-full text-left border-2 rounded-xl overflow-hidden transition-all ${
+                    form.template === t.id
+                      ? "border-emerald-500 bg-[#1a1e26]"
+                      : "border-slate-700 hover:border-slate-500 bg-[#15181e]"
+                  }`}
+                >
                   <div className={`h-32 p-4 flex flex-col ${t.color}`}>
-                    <div className="flex justify-between items-center mb-2"><div className={`font-bold text-sm truncate ${t.textColor}`}>{form.name || "Mi Tienda"}</div><div className={`w-6 h-1 rounded-full opacity-50 ${t.textColor.replace('text-', 'bg-')}`}></div></div>
-                    <div className={`text-[10px] opacity-70 mb-2 ${t.textColor}`}>Productos</div>
-                    <div className="flex gap-2 mt-auto"><div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace('text-', 'bg-')}`}></div><div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace('text-', 'bg-')}`}></div><div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace('text-', 'bg-')}`}></div></div>
+                    <div className="flex justify-between items-center mb-2">
+                      <div className={`font-bold text-sm truncate ${t.textColor}`}>
+                        {form.name || "Mi Tienda"}
+                      </div>
+                      <div className={`w-6 h-1 rounded-full opacity-50 ${t.textColor.replace("text-", "bg-")}`} />
+                    </div>
+
+                    <div className={`text-[10px] opacity-70 mb-2 ${t.textColor}`}>
+                      Productos
+                    </div>
+
+                    <div className="flex gap-2 mt-auto">
+                      <div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace("text-", "bg-")}`} />
+                      <div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace("text-", "bg-")}`} />
+                      <div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace("text-", "bg-")}`} />
+                    </div>
                   </div>
-                  <div className="p-3 text-center border-t border-slate-700/50 flex items-center justify-between"><span className="text-sm font-semibold text-slate-300">{t.name}</span>{form.template === t.id && <span className="text-emerald-500 text-xs font-bold">✓</span>}</div>
+
+                  <div className="p-3 text-center border-t border-slate-700/50 flex items-center justify-between">
+                    <span className="text-sm font-semibold text-slate-300">{t.name}</span>
+                    {form.template === t.id && (
+                      <span className="text-emerald-500 text-xs font-bold">✓</span>
+                    )}
+                  </div>
                 </button>
               ))}
             </div>
@@ -253,22 +465,50 @@ export default function RegistroPage() {
         {step === 4 && (
           <div className="space-y-5">
             <h1 className="text-3xl font-bold text-white">¡Todo listo! 🎉</h1>
-            <p className="text-slate-400">Tu tienda <b className="text-white">{form.name}</b> está lista.</p>
+
+            <p className="text-slate-400">
+              Tu tienda <b className="text-white">{form.name}</b> está lista.
+            </p>
+
             <div className="bg-[#15181e] border border-slate-700 p-5 rounded-xl text-sm space-y-3 text-slate-300">
-              <p>📧 {form.email}</p><p>📱 {form.countryCode} {form.whatsapp}</p><p>🎨 Template: {form.template}</p>
+              <p>📧 {form.email}</p>
+              <p>📱 {form.countryCode} {form.whatsapp}</p>
+              <p>🎨 Template: {form.template}</p>
             </div>
           </div>
         )}
 
         <div className="flex gap-3 mt-10">
-          {step > 1 && <button type="button" onClick={prev} disabled={isLoading} className="flex-1 border border-slate-600 py-3 rounded-lg font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50">Atrás</button>}
+          {step > 1 && (
+            <button
+              type="button"
+              onClick={prev}
+              disabled={isLoading}
+              className="flex-1 border border-slate-600 py-3 rounded-lg font-medium text-slate-300 hover:bg-slate-800 disabled:opacity-50"
+            >
+              Atrás
+            </button>
+          )}
+
           {step < 4 ? (
-            <button type="button" onClick={handleNext} className={`flex-1 py-3 rounded-lg font-bold transition ${(step === 1 && !isStep1Valid) || (step === 2 && !isStep2Valid) || (step === 3 && !isStep3Valid) ? "bg-slate-700 text-slate-400 cursor-not-allowed" : "bg-emerald-500 text-black hover:bg-emerald-400"}`}>Continuar</button>
+            <button
+              type="button"
+              onClick={handleNext}
+              className={`flex-1 py-3 rounded-lg font-bold transition ${
+                (step === 1 && !isStep1Valid) ||
+                (step === 2 && !isStep2Valid) ||
+                (step === 3 && !isStep3Valid)
+                  ? "bg-slate-700 text-slate-400 cursor-not-allowed"
+                  : "bg-emerald-500 text-black hover:bg-emerald-400"
+              }`}
+            >
+              Continuar
+            </button>
           ) : (
-            <button 
-              type="button" 
-              disabled={isLoading} 
-              onClick={handleCreateStore} 
+            <button
+              type="button"
+              disabled={isLoading}
+              onClick={handleCreateStore}
               className="flex-1 bg-white text-black py-3 rounded-lg font-bold hover:bg-slate-200 disabled:opacity-50"
             >
               {isLoading ? "Creando..." : "Crear mi tienda"}
@@ -278,8 +518,24 @@ export default function RegistroPage() {
 
         <p className="text-center text-xs text-slate-500 mt-6 max-w-md mx-auto">
           Este sitio está protegido por reCAPTCHA y se aplican la{" "}
-          <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer" className="underline hover:text-slate-300">Política de Privacidad</a> y los{" "}
-          <a href="https://policies.google.com/terms" target="_blank" rel="noreferrer" className="underline hover:text-slate-300">Términos de Servicio</a> de Google.
+          <a
+            href="https://policies.google.com/privacy"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-slate-300"
+          >
+            Política de Privacidad
+          </a>{" "}
+          y los{" "}
+          <a
+            href="https://policies.google.com/terms"
+            target="_blank"
+            rel="noreferrer"
+            className="underline hover:text-slate-300"
+          >
+            Términos de Servicio
+          </a>{" "}
+          de Google.
         </p>
       </div>
     </div>
