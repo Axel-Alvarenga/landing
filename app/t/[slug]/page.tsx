@@ -40,6 +40,7 @@ export default function StorePage({ params }: { params: Promise<{ slug: string }
   // DATOS DEL CLIENTE
   const [customerName, setCustomerName] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
+  const [isCheckingOut, setIsCheckingOut] = useState(false);
 
   // --- CARGAR TIENDA ---
 
@@ -190,8 +191,8 @@ export default function StorePage({ params }: { params: Promise<{ slug: string }
   // --- FINALIZAR PEDIDO POR WHATSAPP ---
 
 
-const handleCheckout = () => {
-  if (!store || cart.length === 0) return;
+const handleCheckout = async () => {
+  if (!store || cart.length === 0 || isCheckingOut) return;
 
   if (!customerName.trim()) {
     alert("Por favor, ingresa tu nombre para continuar.");
@@ -205,36 +206,67 @@ const handleCheckout = () => {
     return;
   }
 
-  let message = `PEDIDO - ${store.name}\n\n`;
+  try {
+    setIsCheckingOut(true);
 
-  message += `DATOS DEL CLIENTE\n`;
-  message += `Nombre: ${customerName.trim()}\n`;
-  message += `Metodo de pago: ${paymentMethod}\n\n`;
+    // Registrar el pedido en la base de datos.
+    const response = await fetch("/api/orders", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        storeSlug: store.slug,
+        customerName: customerName.trim(),
+        paymentMethod,
+        items: cart.map((item) => ({
+          productId: item.id,
+          quantity: item.quantity,
+        })),
+      }),
+    });
 
-  message += `DETALLE DEL PEDIDO\n\n`;
+    const data = await response.json();
 
-  cart.forEach((item) => {
-    message += `${item.quantity} x ${item.name}\n`;
-    message += `Subtotal: ${formatPrice(item.price * item.quantity)}\n\n`;
-  });
+    if (!response.ok) {
+      throw new Error(data.error || "No se pudo registrar el pedido.");
+    }
 
-  message += `--------------------------\n`;
-  message += `TOTAL DEL PEDIDO: ${formatPrice(total)}\n`;
-  message += `--------------------------\n\n`;
+    // Preparar el mensaje de WhatsApp.
+    let message = `PEDIDO - ${store.name}\n\n`;
+    message += `DATOS DEL CLIENTE\n`;
+    message += `Nombre: ${customerName.trim()}\n`;
+    message += `Método de pago: ${paymentMethod}\n\n`;
+    message += `DETALLE DEL PEDIDO\n\n`;
 
-  message += `Quedo atento a la confirmacion del pedido y los detalles de entrega. Muchas gracias.`;
+    cart.forEach((item) => {
+      message += `${item.quantity} x ${item.name}\n`;
+      message += `Subtotal: ${formatPrice(item.price * item.quantity)}\n\n`;
+    });
 
-  const whatsappUrl =
-    `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+    message += `TOTAL DEL PEDIDO: ${formatPrice(total)}\n\n`;
+    message += `Número de pedido: ${data.id || "Sin número"}\n\n`;
+    message += `Quedo atento a la confirmación del pedido. Muchas gracias.`;
 
-  const whatsappWindow = window.open(whatsappUrl, "_blank");
+    const whatsappUrl =
+      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 
-  // Limpiar el pedido si WhatsApp se abrió correctamente
-  if (whatsappWindow) {
+    // Limpiar el carrito guardado y abrir WhatsApp en esta misma pestaña.
+    localStorage.removeItem(`cart_${store.slug}`);
     setCart([]);
     setCustomerName("");
     setPaymentMethod("Efectivo");
     setIsCartOpen(false);
+    window.location.href = whatsappUrl;
+  } catch (error) {
+    console.error("Error al finalizar pedido:", error);
+    alert(
+      error instanceof Error
+        ? error.message
+        : "Ocurrió un error al registrar el pedido."
+    );
+  } finally {
+    setIsCheckingOut(false);
   }
 };
 
@@ -730,10 +762,10 @@ const handleCheckout = () => {
 
             <button
               onClick={handleCheckout}
-              disabled={!customerName.trim()}
+              disabled={!customerName.trim() || isCheckingOut}
               className="w-full bg-[#25D366] text-white py-3 rounded-lg font-bold flex items-center justify-center gap-2 hover:bg-[#20b858] transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Finalizar por WhatsApp
+              {isCheckingOut ? "Registrando pedido..." : "Finalizar por WhatsApp"}
             </button>
 
             <p className="text-xs text-gray-500 text-center">

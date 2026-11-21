@@ -10,6 +10,9 @@ import { resizeImage } from "@/lib/resizeImage";
 export default function DashboardPage() {
   const [store, setStore] = useState<any>(null);
   const [products, setProducts] = useState<any[]>([]);
+  const [orders, setOrders] = useState<any[]>([]);
+  const [loadingOrders, setLoadingOrders] = useState(false);
+  const [processingOrderId, setProcessingOrderId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("resumen");
 
@@ -64,19 +67,6 @@ export default function DashboardPage() {
           return;
         }
 
-        const userCreatedAt = new Date(session.user.created_at);
-        const today = new Date();
-
-        const diffInDays = Math.floor(
-          (today.getTime() - userCreatedAt.getTime()) /
-          (1000 * 3600 * 24)
-        );
-
-        if (diffInDays > 7) {
-          window.location.href = "/upgrade";
-          return;
-        }
-
         const res = await fetch("/api/stores/me", {
           method: "GET",
           headers: {
@@ -101,6 +91,26 @@ export default function DashboardPage() {
         setStore(data);
         setProducts(data.products || []);
         setSelectedTemplate(data.template);
+        if (!data.subscription?.canManage) {
+          return;
+        }
+
+        // Cargar pedidos de esta tienda
+        const ordersRes = await fetch("/api/orders", {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${session.access_token}`
+          },
+          cache: "no-store"
+        });
+
+        if (ordersRes.ok) {
+          const ordersData = await ordersRes.json();
+          setOrders(Array.isArray(ordersData) ? ordersData : []);
+        } else {
+          const ordersError = await ordersRes.json().catch(() => null);
+          console.error("Error cargando pedidos:", ordersError);
+        }
 
       } catch (error) {
         console.error("Error cargando Dashboard:", error);
@@ -390,6 +400,119 @@ export default function DashboardPage() {
     }
   };
 
+  // ACTUALIZAR LISTA DE PEDIDOS
+  const refreshOrders = async () => {
+    setLoadingOrders(true);
+
+    try {
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        showToast("Tu sesión expiró. Volvé a iniciar sesión.", "error");
+        return;
+      }
+
+      const res = await fetch("/api/orders", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        },
+        cache: "no-store"
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudieron cargar los pedidos");
+      }
+
+      setOrders(Array.isArray(data) ? data : []);
+    } catch (error) {
+      console.error(error);
+      showToast(
+        error instanceof Error ? error.message : "Error al cargar pedidos",
+        "error"
+      );
+    } finally {
+      setLoadingOrders(false);
+    }
+  };
+
+  // CONFIRMAR O CANCELAR PEDIDO
+  const handleOrderAction = async (
+    orderId: string,
+    action: "confirm" | "cancel"
+  ) => {
+    const confirmation =
+      action === "confirm"
+        ? "¿Confirmar este pedido como vendido? Se descontará el stock."
+        : "¿Cancelar este pedido? Si ya estaba vendido, se devolverá el stock.";
+
+    if (!confirm(confirmation)) return;
+
+    setProcessingOrderId(orderId);
+
+    try {
+      const {
+        data: { session }
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+      }
+
+      const res = await fetch("/api/orders", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ orderId, action })
+      });
+
+      const data = await res.json().catch(() => null);
+
+      if (!res.ok) {
+        throw new Error(data?.error || "No se pudo actualizar el pedido");
+      }
+
+      setOrders((previous) =>
+        previous.map((order) => order.id === orderId ? data : order)
+      );
+
+      // Actualizar productos para reflejar el stock nuevo
+      const storeRes = await fetch("/api/stores/me", {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        },
+        cache: "no-store"
+      });
+
+      if (storeRes.ok) {
+        const storeData = await storeRes.json();
+        setProducts(storeData.products || []);
+      }
+
+      showToast(
+        action === "confirm"
+          ? "Pedido confirmado. Stock actualizado."
+          : "Pedido cancelado. Stock actualizado si correspondía."
+      );
+    } catch (error) {
+      console.error("Error al procesar pedido:", error);
+      showToast(
+        error instanceof Error ? error.message : "Error al procesar pedido",
+        "error"
+      );
+      await refreshOrders();
+    } finally {
+      setProcessingOrderId(null);
+    }
+  };
+
   // CERRAR SESIÓN
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -405,16 +528,54 @@ export default function DashboardPage() {
     );
   }
 
-  if (!store) {
+  // BLOQUEO POR SUSCRIPCIÓN VENCIDA O EN PERÍODO DE GRACIA
+  if (store.subscription && !store.subscription.canManage) {
+    const isGrace = store.subscription.status === "GRACE";
+
     return (
-      <div className="min-h-screen bg-[#0f1115] flex flex-col items-center justify-center text-white">
-        <h1 className="text-3xl font-bold mb-4">No hay tienda activa</h1>
-        <Link
-          href="/registro"
-          className="bg-emerald-500 text-black px-6 py-3 rounded-lg font-bold"
-        >
-          Crear tienda
-        </Link>
+      <div className="min-h-screen bg-[#0f1115] flex items-center justify-center p-6 text-white">
+        <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-8 max-w-md w-full text-center">
+
+          <div className="text-5xl mb-5">
+            {isGrace ? "⏳" : "🔒"}
+          </div>
+
+          <h1 className="text-2xl font-bold mb-3">
+            {isGrace ? "Tu período de prueba terminó" : "Tu suscripción venció"}
+          </h1>
+
+          <p className="text-slate-400 mb-6">
+            {isGrace
+              ? "Tu tienda está en período de gracia. El panel de administración está bloqueado. Todavía tenés tiempo para renovar."
+              : "Tu acceso al panel está suspendido. Renovando tu suscripción podrás volver a administrar tu tienda."
+            }
+          </p>
+
+          {isGrace && (
+            <p className="text-amber-400 font-semibold mb-6">
+              Días restantes de gracia: {store.subscription.daysRemaining}
+            </p>
+          )}
+
+          <p className="text-slate-500 text-sm mb-6">
+            Tu catálogo público permanece disponible.
+          </p>
+
+          <Link
+            href="/upgrade"
+            className="block w-full bg-emerald-500 text-black px-6 py-3 rounded-lg font-bold hover:bg-emerald-400"
+          >
+            Renovar suscripción
+          </Link>
+
+          <button
+            onClick={handleLogout}
+            className="mt-5 text-slate-400 hover:text-white text-sm"
+          >
+            Cerrar sesión
+          </button>
+
+        </div>
       </div>
     );
   }
@@ -428,11 +589,10 @@ export default function DashboardPage() {
 
       {/* TOASTS */}
       {toast && (
-        <div className={`fixed top-6 right-6 z-[60] px-6 py-4 rounded-xl shadow-2xl border flex items-center gap-3 animate-in slide-in-from-top-5 fade-in duration-300 ${
-          toast.type === "success"
+        <div className={`fixed top-6 right-6 z-[60] px-6 py-4 rounded-xl shadow-2xl border flex items-center gap-3 animate-in slide-in-from-top-5 fade-in duration-300 ${toast.type === "success"
             ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
             : "bg-red-500/10 border-red-500/20 text-red-400"
-        }`}>
+          }`}>
           <span className="text-xl">
             {toast.type === "success" ? "✅" : "❌"}
           </span>
@@ -459,11 +619,10 @@ export default function DashboardPage() {
             </div>
 
             <div className={`flex-1 overflow-y-auto ${previewTemplate.bg} ${previewTemplate.textColor} p-6`}>
-              <div className={`flex justify-between items-center mb-8 pb-4 border-b ${
-                previewTemplate.isLight
+              <div className={`flex justify-between items-center mb-8 pb-4 border-b ${previewTemplate.isLight
                   ? "border-black/10"
                   : "border-white/10"
-              }`}>
+                }`}>
                 <div className="flex items-center gap-3">
                   {store.logoUrl && (
                     <img
@@ -476,11 +635,10 @@ export default function DashboardPage() {
                   <span className="font-bold text-xl">{store.name}</span>
                 </div>
 
-                <button className={`px-4 py-1.5 rounded-full text-xs font-bold ${
-                  previewTemplate.isLight
+                <button className={`px-4 py-1.5 rounded-full text-xs font-bold ${previewTemplate.isLight
                     ? "bg-black text-white"
                     : "bg-white text-black"
-                }`}>
+                  }`}>
                   🛒 Carrito (0)
                 </button>
               </div>
@@ -497,11 +655,10 @@ export default function DashboardPage() {
                     key={i}
                     className={`${previewTemplate.card} rounded-xl overflow-hidden shadow-sm p-4`}
                   >
-                    <div className={`h-32 rounded-lg mb-3 ${
-                      previewTemplate.isLight
+                    <div className={`h-32 rounded-lg mb-3 ${previewTemplate.isLight
                         ? "bg-black/5"
                         : "bg-white/10"
-                    }`}></div>
+                      }`}></div>
 
                     <h3 className="font-bold text-sm mb-1">
                       Producto de ejemplo
@@ -686,44 +843,40 @@ export default function DashboardPage() {
         <nav className="flex-1 p-4 space-y-2">
           <button
             onClick={() => setActiveTab("resumen")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-              activeTab === "resumen"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${activeTab === "resumen"
                 ? "bg-emerald-500/10 text-emerald-400"
                 : "hover:bg-[#1a1e26] text-slate-400"
-            }`}
+              }`}
           >
             <span>📊</span> Resumen
           </button>
 
           <button
             onClick={() => setActiveTab("productos")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-              activeTab === "productos"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${activeTab === "productos"
                 ? "bg-emerald-500/10 text-emerald-400"
                 : "hover:bg-[#1a1e26] text-slate-400"
-            }`}
+              }`}
           >
             <span>📦</span> Productos
           </button>
 
           <button
             onClick={() => setActiveTab("pedidos")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-              activeTab === "pedidos"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${activeTab === "pedidos"
                 ? "bg-emerald-500/10 text-emerald-400"
                 : "hover:bg-[#1a1e26] text-slate-400"
-            }`}
+              }`}
           >
             <span>🛒</span> Pedidos
           </button>
 
           <button
             onClick={() => setActiveTab("ajustes")}
-            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${
-              activeTab === "ajustes"
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${activeTab === "ajustes"
                 ? "bg-emerald-500/10 text-emerald-400"
                 : "hover:bg-[#1a1e26] text-slate-400"
-            }`}
+              }`}
           >
             <span>⚙️</span> Ajustes
           </button>
@@ -761,9 +914,8 @@ export default function DashboardPage() {
       <div className="md:hidden fixed bottom-0 w-full bg-[#15181e] border-t border-slate-800 flex justify-around p-3 z-40 pb-safe">
         <button
           onClick={() => setActiveTab("resumen")}
-          className={`flex flex-col items-center gap-1 ${
-            activeTab === "resumen" ? "text-emerald-400" : "text-slate-400"
-          }`}
+          className={`flex flex-col items-center gap-1 ${activeTab === "resumen" ? "text-emerald-400" : "text-slate-400"
+            }`}
         >
           <span>📊</span>
           <span className="text-[10px]">Resumen</span>
@@ -771,9 +923,8 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setActiveTab("productos")}
-          className={`flex flex-col items-center gap-1 ${
-            activeTab === "productos" ? "text-emerald-400" : "text-slate-400"
-          }`}
+          className={`flex flex-col items-center gap-1 ${activeTab === "productos" ? "text-emerald-400" : "text-slate-400"
+            }`}
         >
           <span>📦</span>
           <span className="text-[10px]">Productos</span>
@@ -781,9 +932,8 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setActiveTab("pedidos")}
-          className={`flex flex-col items-center gap-1 ${
-            activeTab === "pedidos" ? "text-emerald-400" : "text-slate-400"
-          }`}
+          className={`flex flex-col items-center gap-1 ${activeTab === "pedidos" ? "text-emerald-400" : "text-slate-400"
+            }`}
         >
           <span>🛒</span>
           <span className="text-[10px]">Pedidos</span>
@@ -791,9 +941,8 @@ export default function DashboardPage() {
 
         <button
           onClick={() => setActiveTab("ajustes")}
-          className={`flex flex-col items-center gap-1 ${
-            activeTab === "ajustes" ? "text-emerald-400" : "text-slate-400"
-          }`}
+          className={`flex flex-col items-center gap-1 ${activeTab === "ajustes" ? "text-emerald-400" : "text-slate-400"
+            }`}
         >
           <span>⚙️</span>
           <span className="text-[10px]">Ajustes</span>
@@ -822,6 +971,31 @@ export default function DashboardPage() {
             Ver mi tienda ↗
           </Link>
         </header>
+        {/* ESTADO DE SUSCRIPCIÓN */}
+        {store.subscription && (
+          <div className="mb-8 bg-[#15181e] border border-slate-800 rounded-xl p-5">
+            {store.subscription.status === "TRIAL" ? (
+              <>
+                <p className="text-emerald-400 font-bold">
+                  🎁 Período de prueba gratuito
+                </p>
+                <p className="text-slate-300 text-sm mt-2">
+                  Te quedan {store.subscription.daysRemaining} días de prueba.
+                </p>
+              </>
+            ) : store.subscription.status === "PRO" ? (
+              <>
+                <p className="text-emerald-400 font-bold">
+                  ⭐ Plan Pro activo
+                </p>
+                <p className="text-slate-300 text-sm mt-2">
+                  Vencimiento:{" "}
+                  {new Date(store.subscription.expiresAt).toLocaleDateString("es-PY")}
+                </p>
+              </>
+            ) : null}
+          </div>
+        )}
 
         {/* RESUMEN */}
         {activeTab === "resumen" && (
@@ -956,16 +1130,143 @@ export default function DashboardPage() {
 
         {/* PEDIDOS */}
         {activeTab === "pedidos" && (
-          <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-10 text-center">
-            <div className="text-5xl mb-4">🛒</div>
+          <div className="space-y-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-xl md:text-2xl font-bold text-white">
+                  Pedidos recibidos
+                </h2>
+                <p className="text-sm text-slate-400 mt-1">
+                  Administrá los pedidos de tus clientes.
+                </p>
+              </div>
 
-            <h2 className="text-xl font-bold text-white mb-2">
-              Módulo de Pedidos
-            </h2>
+              <button
+                onClick={refreshOrders}
+                disabled={loadingOrders}
+                className="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm font-semibold hover:bg-slate-700 disabled:opacity-50"
+              >
+                {loadingOrders ? "Actualizando..." : "↻ Actualizar"}
+              </button>
+            </div>
 
-            <p className="text-slate-400">
-              Próximamente.
-            </p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {[
+                { label: "Todos", value: orders.length },
+                { label: "Pendientes", value: orders.filter(o => o.status === "PENDING").length },
+                { label: "Vendidos", value: orders.filter(o => o.status === "SOLD").length },
+                { label: "Cancelados", value: orders.filter(o => o.status === "CANCELLED").length }
+              ].map((item) => (
+                <div key={item.label} className="bg-[#15181e] border border-slate-800 rounded-xl p-4">
+                  <p className="text-xs text-slate-400">{item.label}</p>
+                  <p className="text-2xl font-bold text-white mt-1">{item.value}</p>
+                </div>
+              ))}
+            </div>
+
+            {loadingOrders ? (
+              <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-10 text-center text-slate-400">
+                Cargando pedidos...
+              </div>
+            ) : orders.length === 0 ? (
+              <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-10 text-center">
+                <div className="text-5xl mb-4">🛒</div>
+                <h3 className="text-lg font-bold text-white mb-2">
+                  Todavía no recibiste pedidos
+                </h3>
+                <p className="text-slate-400 text-sm">
+                  Cuando un cliente realice un pedido, aparecerá aquí.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {orders.map((order) => (
+                  <div
+                    key={order.id}
+                    className="bg-[#15181e] border border-slate-800 rounded-2xl overflow-hidden"
+                  >
+                    <div className="p-4 md:p-6 flex flex-col md:flex-row md:items-start justify-between gap-4 border-b border-slate-800">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2 mb-2">
+                          <h3 className="font-bold text-white">
+                            Pedido #{order.id.slice(-8).toUpperCase()}
+                          </h3>
+                          <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${order.status === "PENDING"
+                              ? "bg-amber-500/10 text-amber-400"
+                              : order.status === "SOLD"
+                                ? "bg-emerald-500/10 text-emerald-400"
+                                : "bg-red-500/10 text-red-400"
+                            }`}>
+                            {order.status === "PENDING"
+                              ? "Pendiente"
+                              : order.status === "SOLD"
+                                ? "Vendido"
+                                : "Cancelado"}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-300">
+                          Cliente: <strong>{order.customerName}</strong>
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1">
+                          {new Date(order.createdAt).toLocaleString("es-PY")}
+                        </p>
+                      </div>
+
+                      <div className="md:text-right">
+                        <p className="text-xs text-slate-400">Total del pedido</p>
+                        <p className="text-xl font-bold text-emerald-400">
+                          Gs. {Number(order.total).toLocaleString("es-PY")}
+                        </p>
+                        <p className="text-xs text-slate-400 mt-1">
+                          Pago: {order.paymentMethod}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="p-4 md:p-6">
+                      <p className="text-xs uppercase tracking-wide text-slate-500 font-bold mb-3">
+                        Productos
+                      </p>
+
+                      <div className="space-y-2">
+                        {(order.items || []).map((item: any) => (
+                          <div key={item.id} className="flex justify-between gap-3 text-sm">
+                            <span className="text-slate-300">
+                              {item.quantity} x {item.productName}
+                            </span>
+                            <span className="text-slate-400 whitespace-nowrap">
+                              Gs. {Number(item.subtotal).toLocaleString("es-PY")}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+
+                      <div className="flex flex-wrap gap-2 mt-5 pt-4 border-t border-slate-800">
+                        {order.status === "PENDING" && (
+                          <button
+                            onClick={() => handleOrderAction(order.id, "confirm")}
+                            disabled={processingOrderId === order.id}
+                            className="bg-emerald-500 text-black px-4 py-2 rounded-lg text-sm font-bold hover:bg-emerald-400 disabled:opacity-50"
+                          >
+                            {processingOrderId === order.id ? "Procesando..." : "✓ Confirmar venta"}
+                          </button>
+                        )}
+
+                        {order.status !== "CANCELLED" && (
+                          <button
+                            onClick={() => handleOrderAction(order.id, "cancel")}
+                            disabled={processingOrderId === order.id}
+                            className="bg-red-500/10 text-red-400 border border-red-500/20 px-4 py-2 rounded-lg text-sm font-bold hover:bg-red-500/20 disabled:opacity-50"
+                          >
+                            Cancelar pedido
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
@@ -1036,11 +1337,10 @@ export default function DashboardPage() {
                   <button
                     key={t.id}
                     onClick={() => setPreviewTemplate(t)}
-                    className={`relative border-2 rounded-xl overflow-hidden transition-all duration-200 group text-left ${
-                      selectedTemplate === t.id
+                    className={`relative border-2 rounded-xl overflow-hidden transition-all duration-200 group text-left ${selectedTemplate === t.id
                         ? "border-emerald-500 shadow-[0_0_20px_-5px_rgba(16,185,129,0.3)] ring-2 ring-emerald-500/20"
                         : "border-slate-700 hover:border-slate-500"
-                    }`}
+                      }`}
                   >
                     <div className={`h-24 p-3 flex flex-col ${t.color}`}>
                       <div className={`font-bold text-[10px] truncate ${t.textColor}`}>

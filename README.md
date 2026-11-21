@@ -26,19 +26,26 @@ El objetivo es ofrecer una herramienta sencilla para que pequeños comercios pue
 - Carrito de compras lateral.
 - Persistencia del carrito en el navegador.
 - Envío de pedidos mediante WhatsApp.
-- Registro de pedidos en la plataforma.
+- Registro automático de pedidos en la plataforma.
+- Cálculo de subtotales y total del pedido en el servidor.
+- Validación de productos y disponibilidad de stock antes de registrar un pedido.
 
 ### 📋 Gestión de pedidos y ventas
+- Visualización de pedidos desde el Dashboard.
 - Estados de pedido: pendiente, vendido y cancelado.
-- Confirmación de ventas desde el sistema.
-- Actualización del stock al confirmar una venta.
+- Confirmación de pedidos desde el sistema.
+- Descuento automático del stock al confirmar una venta.
+- Devolución del stock cuando se cancela una venta confirmada.
 - Registro de fechas de venta y cancelación.
+- Validación de cambios de estado para evitar operaciones duplicadas.
+- Historial de pedidos ordenado por fecha.
 
 ### 🔐 Seguridad y autenticación
-- Autenticación de usuarios mediante Supabase.
-- Protección de operaciones mediante sesiones y tokens.
+- Autenticación de usuarios mediante Supabase Auth.
+- Protección de operaciones privadas mediante tokens de autenticación.
 - Verificación de propiedad de las tiendas antes de modificar sus datos.
-- Protección de rutas para productos y configuración de tiendas.
+- Protección de operaciones de creación, edición y eliminación de productos.
+- Protección de las operaciones de gestión de pedidos.
 - Google reCAPTCHA v3 para reducir registros automatizados.
 - Almacenamiento de imágenes mediante Supabase Storage.
 
@@ -49,7 +56,7 @@ El objetivo es ofrecer una herramienta sencilla para que pequeños comercios pue
 
 | Tecnología | Uso |
 |---|---|
-| Next.js 15 | Frontend y backend (App Router) |
+| Next.js 16.4.6 | Frontend y backend (App Router) |
 | React | Interfaces de usuario |
 | TypeScript | Tipado y desarrollo |
 | Tailwind CSS v4 | Estilos y diseño |
@@ -104,23 +111,41 @@ npx prisma generate
 npm run dev
 ```
 
-Abrir [http://localhost:3000](http://localhost:3000) en el navegador.
+Abrir http://localhost:3000 en el navegador.
+
+### 6. Compilar para producción
+
+Para comprobar que el proyecto puede compilarse:
+
+```bash
+npm run build
+```
+
+Para ejecutar la versión de producción localmente:
+
+```bash
+npm start
+```
 
 ## 📁 Estructura general del proyecto
 
 ```text
 ARAE/
 ├── app/
-│   ├── api/             # Rutas de la API
-│   ├── dashboard/       # Panel de administración
-│   ├── registro/        # Registro de usuarios y tiendas
-│   └── ...              # Páginas públicas
-├── components/          # Componentes reutilizables
-├── lib/                 # Configuración de Prisma y Supabase
+│   ├── api/
+│   │   ├── orders/       # Registro y gestión de pedidos
+│   │   ├── products/     # Gestión de productos
+│   │   └── stores/       # Gestión de tiendas
+│   ├── dashboard/        # Panel de administración
+│   ├── registro/         # Registro de usuarios y tiendas
+│   ├── t/[slug]/         # Tienda pública
+│   └── ...               # Otras páginas
+├── components/           # Componentes reutilizables
+├── lib/                  # Configuración de Prisma y Supabase
 ├── prisma/
-│   └── schema.prisma    # Modelos y estructura de datos
-├── public/              # Recursos estáticos
-├── .env                 # Variables privadas (no subir)
+│   └── schema.prisma     # Modelos y estructura de datos
+├── public/               # Recursos estáticos
+├── .env                  # Variables privadas (no subir)
 └── README.md
 ```
 
@@ -128,12 +153,16 @@ ARAE/
 
 - Las operaciones privadas requieren autenticación.
 - El servidor verifica que el usuario sea propietario de la tienda antes de modificar sus recursos.
+- Las operaciones de pedidos y stock se validan desde el servidor.
 - Las credenciales privadas deben configurarse mediante variables de entorno.
 - Las políticas de Supabase Storage deben restringir las operaciones de escritura a los usuarios autorizados.
+- El archivo `.env` y las credenciales privadas no deben publicarse en el repositorio.
 
 ## 📌 Estado del proyecto
 
-ARAE se encuentra en desarrollo. Se están implementando progresivamente nuevas funcionalidades para mejorar la administración de tiendas, productos, pedidos y ventas.
+ARAE cuenta con las funcionalidades principales para la creación y administración de tiendas online, gestión de productos, recepción de pedidos y control de ventas.
+
+El siguiente objetivo es completar las pruebas de seguridad, rendimiento y funcionamiento en producción para preparar el lanzamiento inicial de la plataforma.
 
 ---
 

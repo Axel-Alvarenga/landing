@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
+import { getSubscriptionInfo } from "@/lib/subscription";
 
 export async function GET(req: Request) {
   try {
@@ -45,7 +46,14 @@ export async function GET(req: Request) {
       );
     }
 
-    return NextResponse.json(store);
+    // Calcular el estado de la suscripción.
+    const subscription = getSubscriptionInfo(store);
+
+    // Devolver la tienda junto con su información de suscripción.
+    return NextResponse.json({
+      ...store,
+      subscription
+    });
 
   } catch (error) {
     console.error("Error buscando tienda del usuario:", error);

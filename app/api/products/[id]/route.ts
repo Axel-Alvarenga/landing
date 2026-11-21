@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
+import { getSubscriptionInfo } from "@/lib/subscription";
 
 // Verificar que el usuario esté autenticado
 async function getAuthenticatedUser(req: Request) {
@@ -26,6 +27,42 @@ async function getAuthenticatedUser(req: Request) {
   return data.user;
 }
 
+// Verificar que la tienda permita administrar productos
+async function getManageableProduct(id: string, userId: string) {
+  const product = await prisma.product.findFirst({
+    where: {
+      id,
+      store: {
+        userId
+      }
+    },
+    include: {
+      store: true
+    }
+  });
+
+  if (!product) {
+    return {
+      product: null,
+      error: "Producto no encontrado o sin permisos"
+    };
+  }
+
+  const subscription = getSubscriptionInfo(product.store);
+
+  if (!subscription.canManage) {
+    return {
+      product: null,
+      error: "Tu suscripción no permite modificar productos. Renovala para continuar."
+    };
+  }
+
+  return {
+    product,
+    error: null
+  };
+}
+
 // ELIMINAR PRODUCTO
 export async function DELETE(
   req: Request,
@@ -43,20 +80,12 @@ export async function DELETE(
 
     const { id } = await params;
 
-    // Comprobar que el producto pertenezca a una tienda del usuario
-    const product = await prisma.product.findFirst({
-      where: {
-        id,
-        store: {
-          userId: user.id
-        }
-      }
-    });
+    const result = await getManageableProduct(id, user.id);
 
-    if (!product) {
+    if (!result.product) {
       return NextResponse.json(
-        { error: "Producto no encontrado o sin permisos" },
-        { status: 404 }
+        { error: result.error },
+        { status: result.error?.includes("suscripción") ? 403 : 404 }
       );
     }
 
@@ -110,20 +139,12 @@ export async function PUT(
       );
     }
 
-    // Comprobar que el producto pertenezca a una tienda del usuario
-    const product = await prisma.product.findFirst({
-      where: {
-        id,
-        store: {
-          userId: user.id
-        }
-      }
-    });
+    const result = await getManageableProduct(id, user.id);
 
-    if (!product) {
+    if (!result.product) {
       return NextResponse.json(
-        { error: "Producto no encontrado o sin permisos" },
-        { status: 404 }
+        { error: result.error },
+        { status: result.error?.includes("suscripción") ? 403 : 404 }
       );
     }
 

@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
+import { getSubscriptionInfo } from "@/lib/subscription";
 
 // GET: consulta pública de la tienda
 export async function GET(
@@ -82,8 +83,19 @@ export async function PUT(
       );
     }
 
-    // 3. Validar los datos recibidos
+    // 3. Verificar suscripción
+    const subscription = getSubscriptionInfo(store);
+
+    if (!subscription.canManage) {
+      return NextResponse.json(
+        { error: "Tu suscripción no permite modificar la tienda. Renovala para continuar." },
+        { status: 403 }
+      );
+    }
+
+    // 4. Validar los datos recibidos
     const body = await req.json();
+
     const updateData: {
       template?: string;
       logoUrl?: string | null;
@@ -124,7 +136,7 @@ export async function PUT(
       );
     }
 
-    // 4. Actualizar tienda
+    // 5. Actualizar tienda
     const updatedStore = await prisma.store.update({
       where: { id: store.id },
       data: updateData

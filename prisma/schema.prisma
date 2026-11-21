@@ -16,18 +16,23 @@ enum OrderStatus {
 }
 
 model Store {
-  id        String    @id @default(cuid())
-  slug      String    @unique
-  name      String
-  category  String
-  template  String
-  email     String
-  whatsapp  String
-  logoUrl   String?
-  userId    String?
-  products  Product[]
-  orders    Order[]
-  createdAt DateTime  @default(now())
+  id                 String    @id @default(cuid())
+  slug               String    @unique
+  name               String
+  category            String
+  template            String
+  email              String
+  whatsapp            String
+  logoUrl            String?
+  userId             String?
+
+  trialEndsAt        DateTime?
+  subscriptionEndsAt DateTime?
+  planActivatedAt   DateTime?
+
+  products           Product[]
+  orders             Order[]
+  createdAt          DateTime  @default(now())
 }
 
 model Product {

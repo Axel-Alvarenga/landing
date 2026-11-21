@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
+import { getSubscriptionInfo } from "@/lib/subscription";
 
 export async function POST(req: Request) {
   try {
@@ -64,7 +65,17 @@ export async function POST(req: Request) {
       );
     }
 
-    // 4. Crear producto
+    // 4. Verificar suscripción
+    const subscription = getSubscriptionInfo(store);
+
+    if (!subscription.canManage) {
+      return NextResponse.json(
+        { error: "Tu suscripción no permite modificar productos. Renovala para continuar." },
+        { status: 403 }
+      );
+    }
+
+    // 5. Crear producto
     const product = await prisma.product.create({
       data: {
         storeId,

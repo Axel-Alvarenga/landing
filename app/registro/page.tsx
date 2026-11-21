@@ -6,7 +6,13 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
-const categories = ["Gastronomía", "Remeras y Jeans", "Relojes", "Zapatos", "Ropa Interior"];
+const categories = [
+  "Gastronomía",
+  "Remeras y Jeans",
+  "Relojes",
+  "Zapatos",
+  "Ropa Interior",
+];
 
 const countries = [
   { code: "AR", dial: "+54", name: "Argentina" },
@@ -31,7 +37,10 @@ const countries = [
   { code: "VE", dial: "+58", name: "Venezuela" },
 ];
 
-const templatesData: Record<string, { id: string; name: string; color: string; textColor: string }[]> = {
+const templatesData: Record<
+  string,
+  { id: string; name: string; color: string; textColor: string }[]
+> = {
   "Gastronomía": [
     { id: "g1", name: "Menú Oscuro", color: "bg-zinc-900", textColor: "text-amber-400" },
     { id: "g2", name: "Orgánico", color: "bg-emerald-50", textColor: "text-emerald-800" },
@@ -95,7 +104,10 @@ export default function RegistroPage() {
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(event.target as Node)
+      ) {
         setIsDropdownOpen(false);
       }
     }
@@ -111,7 +123,7 @@ export default function RegistroPage() {
       c.dial.includes(searchQuery)
   );
 
-  const handleSelectCountry = (country: typeof countries[0]) => {
+  const handleSelectCountry = (country: (typeof countries)[0]) => {
     setForm({
       ...form,
       countryCode: country.dial,
@@ -126,6 +138,7 @@ export default function RegistroPage() {
   const isEmailInvalid = form.email.length > 0 && !isEmailValid;
 
   const isStep1Valid = form.name.trim().length > 2 && form.category !== "";
+
   const isStep2Valid =
     isEmailValid &&
     form.password.length >= 6 &&
@@ -167,7 +180,7 @@ export default function RegistroPage() {
     setIsLoading(true);
 
     try {
-      const token = await executeRecaptcha("registro_tienda");
+      const email = form.email.trim().toLowerCase();
 
       const slug = form.name
         .toLowerCase()
@@ -177,54 +190,86 @@ export default function RegistroPage() {
 
       if (!slug) {
         alert("El nombre de la tienda no es válido.");
-        setIsLoading(false);
         return;
       }
 
-      // 1. Cerramos cualquier sesión anterior.
-      await supabase.auth.signOut();
+      // 1. Comprobar si ya existe una sesión.
+      const { data: sessionData } = await supabase.auth.getSession();
 
-      // 2. Creamos la cuenta.
-      const { error: authError } = await supabase.auth.signUp({
-        email: form.email,
-        password: form.password,
-      });
+      let accessToken = sessionData.session?.access_token;
+      const currentEmail = sessionData.session?.user.email?.toLowerCase();
 
-      if (authError) {
-        alert("Error al crear cuenta: " + authError.message);
-        setIsLoading(false);
-        return;
-      }
-
-      // 3. Iniciamos sesión.
-      const { error: loginError } =
-        await supabase.auth.signInWithPassword({
-          email: form.email,
-          password: form.password,
-        });
-
-      if (loginError) {
+      if (accessToken && currentEmail !== email) {
         alert(
-          "Cuenta creada, pero no se pudo iniciar sesión: " +
-            loginError.message
+          "Tenés una sesión iniciada con otro correo. Cerrá esa sesión antes de continuar."
         );
-        setIsLoading(false);
         return;
       }
 
-      // 4. Obtenemos el token de acceso.
-      const { data: sessionData, error: sessionError } =
-        await supabase.auth.getSession();
+      // 2. Si no hay sesión, intentar registrar la cuenta.
+      if (!accessToken) {
+        const { data: signupData, error: signupError } =
+          await supabase.auth.signUp({
+            email,
+            password: form.password,
+          });
 
-      const accessToken = sessionData.session?.access_token;
+        if (signupError) {
+          // Si el correo ya existe, iniciar sesión.
+          if (
+            signupError.message.toLowerCase().includes("already registered") ||
+            signupError.message.toLowerCase().includes("already been registered")
+          ) {
+            const { data: loginData, error: loginError } =
+              await supabase.auth.signInWithPassword({
+                email,
+                password: form.password,
+              });
 
-      if (sessionError || !accessToken) {
-        alert("No se pudo obtener la sesión. Volvé a iniciar sesión.");
-        setIsLoading(false);
+            if (loginError || !loginData.session) {
+              alert(
+                "No se pudo iniciar sesión. Verificá que el correo y la contraseña sean correctos."
+              );
+              return;
+            }
+
+            accessToken = loginData.session.access_token;
+          } else {
+            alert("Error al crear cuenta: " + signupError.message);
+            return;
+          }
+        } else if (signupData.session) {
+          // Cuenta nueva con sesión inmediata.
+          accessToken = signupData.session.access_token;
+        } else {
+          // Supabase puede no devolver sesión cuando el correo ya existe
+          // o cuando requiere confirmar el correo.
+          const { data: loginData, error: loginError } =
+            await supabase.auth.signInWithPassword({
+              email,
+              password: form.password,
+            });
+
+          if (loginData.session && !loginError) {
+            accessToken = loginData.session.access_token;
+          } else {
+            alert(
+              "No se pudo iniciar sesión. Si tu cuenta es nueva, revisá tu correo para confirmar el registro. Si ya tenés cuenta, verificá tu contraseña."
+            );
+            return;
+          }
+        }
+      }
+
+      if (!accessToken) {
+        alert("No se pudo obtener tu sesión. Iniciá sesión nuevamente.");
         return;
       }
 
-      // 5. Creamos la tienda en el servidor.
+      // 3. Verificar reCAPTCHA.
+      const recaptchaToken = await executeRecaptcha("registro_tienda");
+
+      // 4. Enviar solicitud para crear la tienda.
       const res = await fetch("/api/stores", {
         method: "POST",
         headers: {
@@ -233,40 +278,50 @@ export default function RegistroPage() {
         },
         body: JSON.stringify({
           slug,
-          name: form.name,
+          name: form.name.trim(),
           category: form.category,
           template: form.template,
-          email: form.email,
+          email,
           whatsapp: `${form.countryCode} ${form.whatsapp}`,
-          recaptchaToken: token,
+          recaptchaToken,
         }),
       });
 
       const responseData = await res.json();
 
+      // 5. Si el usuario ya tiene tienda, ingresar a ella.
+      if (res.status === 409 && responseData.existingStore?.slug) {
+        localStorage.setItem(
+          "currentStoreSlug",
+          responseData.existingStore.slug
+        );
+
+        alert("Ya tenés una tienda registrada. Ingresando a tu panel.");
+
+        window.location.href = "/dashboard";
+        return;
+      }
+
       if (!res.ok) {
         alert(responseData.error || "Error al guardar la tienda.");
-        setIsLoading(false);
         return;
       }
 
-      // 6. Verificamos que el servidor haya devuelto una tienda.
-      if (!responseData || !responseData.id || !responseData.slug) {
+      if (!responseData?.id || !responseData?.slug) {
         console.error("Respuesta inesperada del servidor:", responseData);
-        alert("La tienda se creó, pero el servidor devolvió datos incompletos. Contactá con soporte.");
-        setIsLoading(false);
+        alert("La tienda se creó, pero el servidor devolvió datos incompletos.");
         return;
       }
 
-      // 7. Guardamos el slug devuelto por la base de datos.
+      // 6. Guardar la tienda y entrar al Dashboard.
       localStorage.setItem("currentStoreSlug", responseData.slug);
 
-      // 8. Redirigimos al Dashboard.
       window.location.href = "/dashboard";
 
     } catch (error) {
       console.error("Error al crear tienda:", error);
       alert("Hubo un error inesperado al crear la tienda.");
+    } finally {
       setIsLoading(false);
     }
   };
@@ -296,24 +351,33 @@ export default function RegistroPage() {
 
         {step === 1 && (
           <div className="space-y-5">
-            <h1 className="text-3xl font-bold text-white">Datos de tu negocio</h1>
+            <h1 className="text-3xl font-bold text-white">
+              Datos de tu negocio
+            </h1>
+
             <p className="text-slate-400">Empecemos con lo básico.</p>
 
             <input
               className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               placeholder="Nombre de tu tienda"
               value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, name: e.target.value })
+              }
             />
 
             <select
               className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
               value={form.category}
-              onChange={(e) => setForm({ ...form, category: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, category: e.target.value })
+              }
             >
               <option value="">Elegí una categoría</option>
               {categories.map((c) => (
-                <option key={c} value={c}>{c}</option>
+                <option key={c} value={c}>
+                  {c}
+                </option>
               ))}
             </select>
           </div>
@@ -321,7 +385,9 @@ export default function RegistroPage() {
 
         {step === 2 && (
           <div className="space-y-5">
-            <h1 className="text-3xl font-bold text-white">Datos de contacto</h1>
+            <h1 className="text-3xl font-bold text-white">
+              Datos de contacto
+            </h1>
 
             <div>
               <input
@@ -329,11 +395,15 @@ export default function RegistroPage() {
                 placeholder="Email"
                 type="email"
                 value={form.email}
-                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, email: e.target.value })
+                }
               />
 
               {isEmailInvalid && (
-                <p className="text-red-500 text-xs mt-1.5 ml-1">Email inválido.</p>
+                <p className="text-red-500 text-xs mt-1.5 ml-1">
+                  Email inválido.
+                </p>
               )}
             </div>
 
@@ -342,7 +412,9 @@ export default function RegistroPage() {
               placeholder="Contraseña (min. 6)"
               type="password"
               value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              onChange={(e) =>
+                setForm({ ...form, password: e.target.value })
+              }
             />
 
             <div className="flex gap-2">
@@ -360,8 +432,12 @@ export default function RegistroPage() {
                         alt={currentCountryFlag.name}
                       />
                     )}
-                    <span className="text-sm font-medium">{form.countryCode}</span>
+
+                    <span className="text-sm font-medium">
+                      {form.countryCode}
+                    </span>
                   </div>
+
                   <span className="text-slate-500 text-[10px]">▼</span>
                 </button>
 
@@ -374,7 +450,9 @@ export default function RegistroPage() {
                         placeholder="Buscar..."
                         className="w-full bg-[#0f1115] border border-slate-700 rounded-md p-2 text-sm text-white"
                         value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
+                        onChange={(e) =>
+                          setSearchQuery(e.target.value)
+                        }
                       />
                     </div>
 
@@ -391,8 +469,14 @@ export default function RegistroPage() {
                             className="w-5 rounded-sm"
                             alt={c.name}
                           />
-                          <span className="text-sm flex-1">{c.name}</span>
-                          <span className="text-xs text-slate-500">{c.dial}</span>
+
+                          <span className="text-sm flex-1">
+                            {c.name}
+                          </span>
+
+                          <span className="text-xs text-slate-500">
+                            {c.dial}
+                          </span>
                         </button>
                       ))}
                     </div>
@@ -404,7 +488,9 @@ export default function RegistroPage() {
                 className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500"
                 placeholder="Número de WhatsApp"
                 value={form.whatsapp}
-                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, whatsapp: e.target.value })
+                }
               />
             </div>
           </div>
@@ -412,11 +498,15 @@ export default function RegistroPage() {
 
         {step === 3 && (
           <div className="space-y-5">
-            <h1 className="text-3xl font-bold text-white">Elegí tu diseño</h1>
+            <h1 className="text-3xl font-bold text-white">
+              Elegí tu diseño
+            </h1>
 
             <p className="text-slate-400">
               Templates para:{" "}
-              <b className="text-emerald-400">{form.category || "Tu categoría"}</b>
+              <b className="text-emerald-400">
+                {form.category || "Tu categoría"}
+              </b>
             </p>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -424,7 +514,9 @@ export default function RegistroPage() {
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() => setForm({ ...form, template: t.id })}
+                  onClick={() =>
+                    setForm({ ...form, template: t.id })
+                  }
                   className={`relative w-full text-left border-2 rounded-xl overflow-hidden transition-all ${
                     form.template === t.id
                       ? "border-emerald-500 bg-[#1a1e26]"
@@ -433,10 +525,18 @@ export default function RegistroPage() {
                 >
                   <div className={`h-32 p-4 flex flex-col ${t.color}`}>
                     <div className="flex justify-between items-center mb-2">
-                      <div className={`font-bold text-sm truncate ${t.textColor}`}>
+                      <div
+                        className={`font-bold text-sm truncate ${t.textColor}`}
+                      >
                         {form.name || "Mi Tienda"}
                       </div>
-                      <div className={`w-6 h-1 rounded-full opacity-50 ${t.textColor.replace("text-", "bg-")}`} />
+
+                      <div
+                        className={`w-6 h-1 rounded-full opacity-50 ${t.textColor.replace(
+                          "text-",
+                          "bg-"
+                        )}`}
+                      />
                     </div>
 
                     <div className={`text-[10px] opacity-70 mb-2 ${t.textColor}`}>
@@ -444,16 +544,38 @@ export default function RegistroPage() {
                     </div>
 
                     <div className="flex gap-2 mt-auto">
-                      <div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace("text-", "bg-")}`} />
-                      <div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace("text-", "bg-")}`} />
-                      <div className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace("text-", "bg-")}`} />
+                      <div
+                        className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace(
+                          "text-",
+                          "bg-"
+                        )}`}
+                      />
+
+                      <div
+                        className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace(
+                          "text-",
+                          "bg-"
+                        )}`}
+                      />
+
+                      <div
+                        className={`w-8 h-8 rounded opacity-20 ${t.textColor.replace(
+                          "text-",
+                          "bg-"
+                        )}`}
+                      />
                     </div>
                   </div>
 
                   <div className="p-3 text-center border-t border-slate-700/50 flex items-center justify-between">
-                    <span className="text-sm font-semibold text-slate-300">{t.name}</span>
+                    <span className="text-sm font-semibold text-slate-300">
+                      {t.name}
+                    </span>
+
                     {form.template === t.id && (
-                      <span className="text-emerald-500 text-xs font-bold">✓</span>
+                      <span className="text-emerald-500 text-xs font-bold">
+                        ✓
+                      </span>
                     )}
                   </div>
                 </button>
@@ -464,7 +586,9 @@ export default function RegistroPage() {
 
         {step === 4 && (
           <div className="space-y-5">
-            <h1 className="text-3xl font-bold text-white">¡Todo listo! 🎉</h1>
+            <h1 className="text-3xl font-bold text-white">
+              ¡Todo listo! 🎉
+            </h1>
 
             <p className="text-slate-400">
               Tu tienda <b className="text-white">{form.name}</b> está lista.
