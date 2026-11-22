@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
@@ -190,86 +189,81 @@ export default function StorePage({ params }: { params: Promise<{ slug: string }
 
   // --- FINALIZAR PEDIDO POR WHATSAPP ---
 
+  const handleCheckout = async () => {
+    if (!store || cart.length === 0 || isCheckingOut) return;
 
-const handleCheckout = async () => {
-  if (!store || cart.length === 0 || isCheckingOut) return;
-
-  if (!customerName.trim()) {
-    alert("Por favor, ingresa tu nombre para continuar.");
-    return;
-  }
-
-  const phone = store.whatsapp.replace(/\D/g, "");
-
-  if (!phone) {
-    alert("El número de WhatsApp de esta tienda no es válido.");
-    return;
-  }
-
-  try {
-    setIsCheckingOut(true);
-
-    // Registrar el pedido en la base de datos.
-    const response = await fetch("/api/orders", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        storeSlug: store.slug,
-        customerName: customerName.trim(),
-        paymentMethod,
-        items: cart.map((item) => ({
-          productId: item.id,
-          quantity: item.quantity,
-        })),
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      throw new Error(data.error || "No se pudo registrar el pedido.");
+    if (!customerName.trim()) {
+      alert("Por favor, ingresa tu nombre para continuar.");
+      return;
     }
 
-    // Preparar el mensaje de WhatsApp.
-    let message = `PEDIDO - ${store.name}\n\n`;
-    message += `DATOS DEL CLIENTE\n`;
-    message += `Nombre: ${customerName.trim()}\n`;
-    message += `Método de pago: ${paymentMethod}\n\n`;
-    message += `DETALLE DEL PEDIDO\n\n`;
+    const phone = store.whatsapp.replace(/\D/g, "");
 
-    cart.forEach((item) => {
-      message += `${item.quantity} x ${item.name}\n`;
-      message += `Subtotal: ${formatPrice(item.price * item.quantity)}\n\n`;
-    });
+    if (!phone) {
+      alert("El número de WhatsApp de esta tienda no es válido.");
+      return;
+    }
 
-    message += `TOTAL DEL PEDIDO: ${formatPrice(total)}\n\n`;
-    message += `Número de pedido: ${data.id || "Sin número"}\n\n`;
-    message += `Quedo atento a la confirmación del pedido. Muchas gracias.`;
+    try {
+      setIsCheckingOut(true);
 
-    const whatsappUrl =
-      `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+      const response = await fetch("/api/orders", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          storeSlug: store.slug,
+          customerName: customerName.trim(),
+          paymentMethod,
+          items: cart.map((item) => ({
+            productId: item.id,
+            quantity: item.quantity,
+          })),
+        }),
+      });
 
-    // Limpiar el carrito guardado y abrir WhatsApp en esta misma pestaña.
-    localStorage.removeItem(`cart_${store.slug}`);
-    setCart([]);
-    setCustomerName("");
-    setPaymentMethod("Efectivo");
-    setIsCartOpen(false);
-    window.location.href = whatsappUrl;
-  } catch (error) {
-    console.error("Error al finalizar pedido:", error);
-    alert(
-      error instanceof Error
-        ? error.message
-        : "Ocurrió un error al registrar el pedido."
-    );
-  } finally {
-    setIsCheckingOut(false);
-  }
-};
+      const data = await response.json();
 
+      if (!response.ok) {
+        throw new Error(data.error || "No se pudo registrar el pedido.");
+      }
+
+      let message = `PEDIDO - ${store.name}\n\n`;
+      message += `DATOS DEL CLIENTE\n`;
+      message += `Nombre: ${customerName.trim()}\n`;
+      message += `Método de pago: ${paymentMethod}\n\n`;
+      message += `DETALLE DEL PEDIDO\n\n`;
+
+      cart.forEach((item) => {
+        message += `${item.quantity} x ${item.name}\n`;
+        message += `Subtotal: ${formatPrice(item.price * item.quantity)}\n\n`;
+      });
+
+      message += `TOTAL DEL PEDIDO: ${formatPrice(total)}\n\n`;
+      message += `Número de pedido: ${data.id || "Sin número"}\n\n`;
+      message += `Quedo atento a la confirmación del pedido. Muchas gracias.`;
+
+      const whatsappUrl =
+        `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
+
+      localStorage.removeItem(`cart_${store.slug}`);
+      setCart([]);
+      setCustomerName("");
+      setPaymentMethod("Efectivo");
+      setIsCartOpen(false);
+      window.location.href = whatsappUrl;
+    } catch (error) {
+      console.error("Error al finalizar pedido:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : "Ocurrió un error al registrar el pedido."
+      );
+    } finally {
+      setIsCheckingOut(false);
+    }
+  };
 
   // --- CARGANDO ---
 

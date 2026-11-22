@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { prisma } from "@/lib/prisma";
@@ -34,6 +33,7 @@ export async function POST(req: Request) {
 
     const { storeSlug, customerName, paymentMethod, items } = body;
 
+    // 1. Validación básica de tipos y campos vacíos
     if (
       typeof storeSlug !== "string" ||
       !storeSlug.trim() ||
@@ -46,6 +46,29 @@ export async function POST(req: Request) {
     ) {
       return NextResponse.json(
         { error: "Datos del pedido inválidos" },
+        { status: 400 }
+      );
+    }
+
+    // 2. Validación estricta de paymentMethod (debe coincidir con el frontend)
+    const ALLOWED_PAYMENT_METHODS = [
+      "Efectivo",
+      "Transferencia bancaria"
+    ];
+
+    if (!ALLOWED_PAYMENT_METHODS.includes(paymentMethod.trim())) {
+      return NextResponse.json(
+        { error: "Método de pago no válido" },
+        { status: 400 }
+      );
+    }
+
+    // 3. Sanitización y límite de longitud (coincide con el maxLength=80 del frontend)
+    const sanitizedCustomerName = customerName.trim().slice(0, 80);
+
+    if (sanitizedCustomerName.length === 0) {
+      return NextResponse.json(
+        { error: "El nombre del cliente es demasiado corto" },
         { status: 400 }
       );
     }
@@ -87,10 +110,25 @@ export async function POST(req: Request) {
         );
       }
 
-      quantities.set(
-        item.productId,
-        (quantities.get(item.productId) || 0) + item.quantity
-      );
+      // Límite máximo de 999 unidades por producto
+      if (item.quantity > 999) {
+        return NextResponse.json(
+          { error: "La cantidad máxima por producto es 999" },
+          { status: 400 }
+        );
+      }
+
+      const currentQty = quantities.get(item.productId) || 0;
+      const newQty = currentQty + item.quantity;
+
+      if (newQty > 999) {
+        return NextResponse.json(
+          { error: "La cantidad total por producto no puede superar 999 unidades" },
+          { status: 400 }
+        );
+      }
+
+      quantities.set(item.productId, newQty);
     }
 
     const order = await prisma.$transaction(async (tx) => {
@@ -130,7 +168,7 @@ export async function POST(req: Request) {
 
       return await tx.order.create({
         data: {
-          customerName: customerName.trim(),
+          customerName: sanitizedCustomerName,
           paymentMethod: paymentMethod.trim(),
           total,
           storeId: store.id,
@@ -195,7 +233,6 @@ export async function GET(req: Request) {
       );
     }
 
-    // El panel no puede consultar pedidos durante GRACE o EXPIRED
     const subscription = getSubscriptionInfo(store);
 
     if (!subscription.canManage) {
@@ -259,7 +296,6 @@ export async function PATCH(req: Request) {
       );
     }
 
-    // No permitir modificar pedidos sin una suscripción activa
     const subscription = getSubscriptionInfo(store);
 
     if (!subscription.canManage) {
@@ -288,7 +324,6 @@ export async function PATCH(req: Request) {
             throw new Error("ORDER_NOT_PENDING");
           }
 
-          // Descontar stock al confirmar
           for (const item of order.items) {
             if (!item.productId) {
               throw new Error("PRODUCT_NOT_AVAILABLE");
@@ -347,7 +382,6 @@ export async function PATCH(req: Request) {
             throw new Error("ORDER_ALREADY_CHANGED");
           }
 
-          // Devolver stock si el pedido ya estaba vendido
           if (order.status === "SOLD") {
             for (const item of order.items) {
               if (item.productId) {
@@ -382,30 +416,12 @@ export async function PATCH(req: Request) {
 
     if (error instanceof Error) {
       const messages: Record<string, { message: string; status: number }> = {
-        ORDER_NOT_FOUND: {
-          message: "Pedido no encontrado",
-          status: 404
-        },
-        ORDER_NOT_PENDING: {
-          message: "Este pedido ya no está pendiente",
-          status: 409
-        },
-        ORDER_ALREADY_CHANGED: {
-          message: "El pedido fue modificado. Actualizá la página.",
-          status: 409
-        },
-        ORDER_ALREADY_CANCELLED: {
-          message: "Este pedido ya está cancelado",
-          status: 409
-        },
-        PRODUCT_NOT_AVAILABLE: {
-          message: "Uno de los productos ya no está disponible",
-          status: 409
-        },
-        INSUFFICIENT_STOCK: {
-          message: "No hay stock suficiente para confirmar este pedido",
-          status: 409
-        }
+        ORDER_NOT_FOUND: { message: "Pedido no encontrado", status: 404 },
+        ORDER_NOT_PENDING: { message: "Este pedido ya no está pendiente", status: 409 },
+        ORDER_ALREADY_CHANGED: { message: "El pedido fue modificado. Actualizá la página.", status: 409 },
+        ORDER_ALREADY_CANCELLED: { message: "Este pedido ya está cancelado", status: 409 },
+        PRODUCT_NOT_AVAILABLE: { message: "Uno de los productos ya no está disponible", status: 409 },
+        INSUFFICIENT_STOCK: { message: "No hay stock suficiente para confirmar este pedido", status: 409 }
       };
 
       const knownError = messages[error.message];
@@ -419,9 +435,7 @@ export async function PATCH(req: Request) {
 
       if ("code" in error && error.code === "P2034") {
         return NextResponse.json(
-          {
-            error: "Hubo una operación simultánea. Actualizá los pedidos e intentá nuevamente."
-          },
+          { error: "Hubo una operación simultánea. Actualizá los pedidos e intentá nuevamente." },
           { status: 409 }
         );
       }
