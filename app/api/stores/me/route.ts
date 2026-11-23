@@ -6,6 +6,7 @@ import { getSubscriptionInfo } from "@/lib/subscription";
 
 export async function GET(req: Request) {
   try {
+    // 1. Verificar sesión
     const authHeader = req.headers.get("Authorization");
     const token = authHeader?.replace("Bearer ", "");
 
@@ -30,12 +31,31 @@ export async function GET(req: Request) {
       );
     }
 
+    // 2. Obtener tienda, productos y campos personalizados
     const store = await prisma.store.findFirst({
       where: {
         userId: data.user.id
       },
       include: {
-        products: true
+        products: {
+          include: {
+            customFieldValues: {
+              select: {
+                fieldId: true,
+                value: true
+              }
+            }
+          },
+          orderBy: {
+            createdAt: "desc"
+          }
+        },
+
+        customFields: {
+          orderBy: {
+            sortOrder: "asc"
+          }
+        }
       }
     });
 
@@ -46,10 +66,10 @@ export async function GET(req: Request) {
       );
     }
 
-    // Calcular el estado de la suscripción.
+    // 3. Calcular estado de suscripción
     const subscription = getSubscriptionInfo(store);
 
-    // Devolver la tienda junto con su información de suscripción.
+    // 4. Devolver información de la tienda
     return NextResponse.json({
       ...store,
       subscription

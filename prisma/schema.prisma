@@ -15,37 +15,83 @@ enum OrderStatus {
   CANCELLED
 }
 
+enum CustomFieldType {
+  TEXT
+  NUMBER
+  SELECT
+  DATE
+  CHECKBOX
+}
+
 model Store {
   id                 String    @id @default(cuid())
   slug               String    @unique
   name               String
-  category            String
-  template            String
+  category           String
+  template           String
   email              String
-  whatsapp            String
+  whatsapp           String
   logoUrl            String?
   userId             String?
 
   trialEndsAt        DateTime?
   subscriptionEndsAt DateTime?
-  planActivatedAt   DateTime?
+  planActivatedAt    DateTime?
 
   products           Product[]
   orders             Order[]
+  customFields       CustomField[]
+
   createdAt          DateTime  @default(now())
 }
 
 model Product {
-  id         String      @id @default(cuid())
-  name       String
-  price      Float
-  stock      Int         @default(0)
-  imageUrl   String?
-  category   String?
-  storeId    String
-  store      Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
-  orderItems OrderItem[]
-  createdAt  DateTime    @default(now())
+  id                String      @id @default(cuid())
+  name              String
+  price             Float
+  stock             Int         @default(0)
+  imageUrl          String?
+  category          String?
+
+  storeId           String
+  store             Store       @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  orderItems        OrderItem[]
+  customFieldValues ProductCustomFieldValue[]
+
+  createdAt         DateTime    @default(now())
+}
+
+model CustomField {
+  id          String          @id @default(cuid())
+  name        String
+  type        CustomFieldType
+  options     String[]        @default([])
+  showInStore Boolean         @default(false)
+  required    Boolean         @default(false)
+  sortOrder   Int             @default(0)
+
+  storeId     String
+  store       Store           @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  values      ProductCustomFieldValue[]
+
+  createdAt   DateTime        @default(now())
+
+  @@unique([storeId, name])
+}
+
+model ProductCustomFieldValue {
+  id        String      @id @default(cuid())
+  value     String
+
+  productId String
+  product   Product     @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  fieldId   String
+  field     CustomField @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@unique([productId, fieldId])
 }
 
 model Order {

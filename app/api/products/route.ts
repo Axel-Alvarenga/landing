@@ -4,6 +4,33 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
 import { getSubscriptionInfo } from "@/lib/subscription";
 
+// Validar valores de campos personalizados
+function validateCustomFieldValue(
+  type: string,
+  value: string,
+  options: string[]
+) {
+  switch (type) {
+    case "TEXT":
+      return true;
+
+    case "NUMBER":
+      return value.trim() !== "" && Number.isFinite(Number(value));
+
+    case "SELECT":
+      return options.includes(value);
+
+    case "DATE":
+      return value.trim() !== "" && !Number.isNaN(Date.parse(value));
+
+    case "CHECKBOX":
+      return value === "true" || value === "false";
+
+    default:
+      return false;
+  }
+}
+
 export async function POST(req: Request) {
   try {
     // 1. Verificar sesión
@@ -33,7 +60,16 @@ export async function POST(req: Request) {
 
     // 2. Obtener datos
     const body = await req.json();
-    const { storeId, name, price, stock, imageUrl, category } = body;
+
+    const {
+      storeId,
+      name,
+      price,
+      stock,
+      imageUrl,
+      category,
+      customFieldValues
+    } = body;
 
     if (
       !storeId ||
@@ -70,27 +106,150 @@ export async function POST(req: Request) {
 
     if (!subscription.canManage) {
       return NextResponse.json(
-        { error: "Tu suscripción no permite modificar productos. Renovala para continuar." },
+        {
+          error: "Tu suscripción no permite modificar productos. Renovala para continuar."
+        },
         { status: 403 }
       );
     }
 
-    // 5. Crear producto
-    const product = await prisma.product.create({
-      data: {
-        storeId,
-        name: name.trim(),
-        price: Number(price),
-        stock: Number(stock),
-        imageUrl:
-          typeof imageUrl === "string" && imageUrl.trim()
-            ? imageUrl.trim()
-            : null,
-        category:
-          typeof category === "string" && category.trim()
-            ? category.trim()
-            : "General"
+    // 5. Validar estructura de campos personalizados
+    const values = customFieldValues ?? [];
+
+    if (!Array.isArray(values)) {
+      return NextResponse.json(
+        { error: "Los campos personalizados no son válidos" },
+        { status: 400 }
+      );
+    }
+
+    const receivedFieldIds = values.map(
+      (item: any) => item?.fieldId
+    );
+
+    if (
+      receivedFieldIds.some(
+        (fieldId: any) => typeof fieldId !== "string"
+      ) ||
+      new Set(receivedFieldIds).size !== receivedFieldIds.length
+    ) {
+      return NextResponse.json(
+        { error: "Hay campos personalizados duplicados o inválidos" },
+        { status: 400 }
+      );
+    }
+
+    // 6. Obtener campos definidos para esta tienda
+    const fields = await prisma.customField.findMany({
+      where: {
+        storeId
       }
+    });
+
+    const fieldsMap = new Map(
+      fields.map(field => [field.id, field])
+    );
+
+    // 7. Validar cada valor recibido
+    for (const item of values) {
+      if (
+        !item ||
+        typeof item.fieldId !== "string" ||
+        typeof item.value !== "string"
+      ) {
+        return NextResponse.json(
+          { error: "Valor de campo personalizado inválido" },
+          { status: 400 }
+        );
+      }
+
+      const field = fieldsMap.get(item.fieldId);
+
+      if (!field) {
+        return NextResponse.json(
+          { error: "Uno de los campos no pertenece a esta tienda" },
+          { status: 400 }
+        );
+      }
+
+      if (
+        item.value.trim() === "" &&
+        field.required
+      ) {
+        return NextResponse.json(
+          { error: `El campo "${field.name}" es obligatorio` },
+          { status: 400 }
+        );
+      }
+
+      if (
+        item.value.trim() !== "" &&
+        !validateCustomFieldValue(
+          field.type,
+          item.value,
+          field.options
+        )
+      ) {
+        return NextResponse.json(
+          { error: `El valor del campo "${field.name}" no es válido` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 8. Comprobar que estén presentes los campos obligatorios
+    for (const field of fields) {
+      if (
+        field.required &&
+        !values.some(
+          (item: any) =>
+            item.fieldId === field.id &&
+            item.value.trim() !== ""
+        )
+      ) {
+        return NextResponse.json(
+          { error: `El campo "${field.name}" es obligatorio` },
+          { status: 400 }
+        );
+      }
+    }
+
+    // 9. Crear producto y guardar sus campos personalizados
+    const product = await prisma.$transaction(async (tx) => {
+      return tx.product.create({
+        data: {
+          storeId,
+          name: name.trim(),
+          price: Number(price),
+          stock: Number(stock),
+
+          imageUrl:
+            typeof imageUrl === "string" && imageUrl.trim()
+              ? imageUrl.trim()
+              : null,
+
+          category:
+            typeof category === "string" && category.trim()
+              ? category.trim()
+              : "General",
+
+          customFieldValues: {
+            create: values
+              .filter((item: any) => item.value.trim() !== "")
+              .map((item: any) => ({
+                fieldId: item.fieldId,
+                value: item.value.trim()
+              }))
+          }
+        },
+        include: {
+          customFieldValues: {
+            include: {
+              field: true
+            }
+          }
+        }
+      });
     });
 
     return NextResponse.json(product);

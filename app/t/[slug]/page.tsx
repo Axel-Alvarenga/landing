@@ -8,8 +8,8 @@ type Product = {
   name: string;
   price: number;
   stock: number;
-  imageUrl?: string;
-  category?: string;
+  imageUrl: string | null;
+  category: string | null;
 };
 
 type Store = {
@@ -19,7 +19,7 @@ type Store = {
   template: string;
   whatsapp: string;
   slug: string;
-  logoUrl?: string;
+  logoUrl: string | null;
 };
 
 type CartItem = Product & { quantity: number };

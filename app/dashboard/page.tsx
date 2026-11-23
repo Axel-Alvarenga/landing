@@ -15,6 +15,19 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("resumen");
 
+  // CAMPOS PERSONALIZADOS
+  const [customFields, setCustomFields] = useState<any[]>([]);
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+  const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
+  const [fieldForm, setFieldForm] = useState({
+    name: "",
+    type: "TEXT",
+    options: "",
+    required: false,
+    showInStore: false
+  });
+  const [savingField, setSavingField] = useState(false);
+
   // ESTADOS DE PRODUCTOS
   const [newProduct, setNewProduct] = useState({
     name: "",
@@ -92,6 +105,19 @@ export default function DashboardPage() {
         setSelectedTemplate(data.template);
         if (!data.subscription?.canManage) {
           return;
+        }
+
+        // Cargar campos personalizados
+        const fieldsRes = await fetch("/api/custom-fields", {
+          method: "GET",
+          headers: { Authorization: `Bearer ${session.access_token}` },
+          cache: "no-store"
+        });
+        if (fieldsRes.ok) {
+          const fieldsData = await fieldsRes.json();
+          setCustomFields(Array.isArray(fieldsData) ? fieldsData : []);
+        } else {
+          console.error("Error cargando campos personalizados:", await fieldsRes.json().catch(() => null));
         }
 
         // Cargar pedidos de esta tienda
@@ -185,7 +211,11 @@ export default function DashboardPage() {
           imageUrl: finalImageUrl,
           category: newProduct.category.trim() !== ""
             ? newProduct.category.trim()
-            : "General"
+            : "General",
+          customFieldValues: customFields.map(field => ({
+            fieldId: field.id,
+            value: customFieldValues[field.id] ?? ""
+          }))
         })
       });
 
@@ -233,6 +263,11 @@ export default function DashboardPage() {
 
     setEditImageUrl(product.imageUrl || "");
     setImageFile(null);
+    const existingValues: Record<string, string> = {};
+    (product.customFieldValues || []).forEach((item: any) => {
+      existingValues[item.fieldId] = item.value ?? "";
+    });
+    setCustomFieldValues(existingValues);
     setIsAdding(true);
   };
 
@@ -248,7 +283,104 @@ export default function DashboardPage() {
     setImageFile(null);
     setEditImageUrl("");
     setEditingProductId(null);
+    setCustomFieldValues({});
     setIsAdding(false);
+  };
+
+  // GUARDAR / EDITAR CAMPO PERSONALIZADO
+  const handleSaveCustomField = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!store || !fieldForm.name.trim()) return;
+
+    const options = fieldForm.type === "SELECT"
+      ? fieldForm.options.split(",").map(option => option.trim()).filter(Boolean)
+      : [];
+
+    if (fieldForm.type === "SELECT" && options.length === 0) {
+      showToast("Agregá al menos una opción separada por comas", "error");
+      return;
+    }
+
+    setSavingField(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+
+      const isEditing = Boolean(editingFieldId);
+      const res = await fetch(
+        isEditing ? `/api/custom-fields/${editingFieldId}` : "/api/custom-fields",
+        {
+          method: isEditing ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`
+          },
+          body: JSON.stringify({
+            ...(isEditing ? {} : { storeId: store.id }),
+            name: fieldForm.name.trim(),
+            type: fieldForm.type,
+            options,
+            required: fieldForm.required,
+            showInStore: fieldForm.showInStore
+          })
+        }
+      );
+
+      const result = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(result?.error || "No se pudo guardar el campo");
+
+      if (isEditing) {
+        setCustomFields(previous => previous.map(field => field.id === result.id ? result : field));
+      } else {
+        setCustomFields(previous => [...previous, result].sort((a, b) => a.sortOrder - b.sortOrder));
+      }
+      setFieldForm({ name: "", type: "TEXT", options: "", required: false, showInStore: false });
+      setEditingFieldId(null);
+      showToast(isEditing ? "Campo actualizado" : "Campo creado");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Error al guardar el campo", "error");
+    } finally {
+      setSavingField(false);
+    }
+  };
+
+  const handleEditCustomField = (field: any) => {
+    setEditingFieldId(field.id);
+    setFieldForm({
+      name: field.name,
+      type: field.type,
+      options: (field.options || []).join(", "),
+      required: Boolean(field.required),
+      showInStore: Boolean(field.showInStore)
+    });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  const handleDeleteCustomField = async (id: string) => {
+    if (!confirm("¿Eliminar este campo? También se eliminarán sus valores guardados en los productos.")) return;
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+      const res = await fetch(`/api/custom-fields/${id}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${session.access_token}` }
+      });
+      const result = await res.json().catch(() => null);
+      if (!res.ok) throw new Error(result?.error || "No se pudo eliminar el campo");
+      setCustomFields(previous => previous.filter(field => field.id !== id));
+      setCustomFieldValues(previous => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      if (editingFieldId === id) {
+        setEditingFieldId(null);
+        setFieldForm({ name: "", type: "TEXT", options: "", required: false, showInStore: false });
+      }
+      showToast("Campo eliminado");
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Error al eliminar el campo", "error");
+    }
   };
 
   // ELIMINAR PRODUCTO
@@ -512,6 +644,19 @@ export default function DashboardPage() {
     }
   };
 
+  // COPIAR ENLACE PÚBLICO DE LA TIENDA
+  const handleCopyStoreLink = async () => {
+    const storeUrl = `${window.location.origin}/t/${store.slug}`;
+
+    try {
+      await navigator.clipboard.writeText(storeUrl);
+      showToast("¡Enlace de tu tienda copiado!");
+    } catch (error) {
+      console.error("No se pudo copiar el enlace:", error);
+      showToast("No se pudo copiar el enlace. Intentá nuevamente.", "error");
+    }
+  };
+
   // CERRAR SESIÓN
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -602,6 +747,58 @@ export default function DashboardPage() {
   const existingCategories = Array.from(
     new Set(products.map(p => p.category).filter(Boolean))
   );
+
+  // ESTADÍSTICAS DEL RESUMEN (se calculan con los datos ya cargados)
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const isSameDay = (value: string | Date, date: Date) => {
+    const parsed = new Date(value);
+    return !Number.isNaN(parsed.getTime()) &&
+      parsed.getFullYear() === date.getFullYear() &&
+      parsed.getMonth() === date.getMonth() &&
+      parsed.getDate() === date.getDate();
+  };
+
+  const soldOrders = orders.filter(order => order.status === "SOLD");
+  const todayOrders = orders.filter(order => isSameDay(order.createdAt, today));
+  const todaySales = soldOrders
+    .filter(order => isSameDay(order.createdAt, today))
+    .reduce((sum, order) => sum + Number(order.total || 0), 0);
+  const lowStockProducts = products.filter(product =>
+    product.stock !== null && product.stock !== undefined && Number(product.stock) <= 5
+  );
+
+  const lastSevenDays = Array.from({ length: 7 }, (_, index) => {
+    const date = new Date(startOfToday);
+    date.setDate(startOfToday.getDate() - (6 - index));
+    const total = soldOrders
+      .filter(order => isSameDay(order.createdAt, date))
+      .reduce((sum, order) => sum + Number(order.total || 0), 0);
+    return {
+      date,
+      label: date.toLocaleDateString("es-PY", { weekday: "short" }).replace(".", ""),
+      total
+    };
+  });
+  const maxDailySales = Math.max(...lastSevenDays.map(day => day.total), 1);
+
+  const bestSellingProducts = Object.values(
+    soldOrders.reduce((acc: Record<string, { name: string; quantity: number }>, order) => {
+      (order.items || []).forEach((item: any) => {
+        const name = item.productName || "Producto";
+        if (!acc[name]) acc[name] = { name, quantity: 0 };
+        acc[name].quantity += Number(item.quantity || 0);
+      });
+      return acc;
+    }, {})
+  ).sort((a, b) => b.quantity - a.quantity).slice(0, 5);
+
+  const recentOrders = [...orders]
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .slice(0, 5);
+
+  const formatGs = (amount: number) =>
+    `Gs. ${Number(amount || 0).toLocaleString("es-PY")}`;
 
   return (
     <div className="min-h-screen bg-[#0f1115] text-slate-200 font-sans flex flex-col md:flex-row relative">
@@ -814,6 +1011,42 @@ export default function DashboardPage() {
                 />
               </div>
 
+              {customFields.map((field: any) => (
+                <div key={field.id}>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">
+                    {field.name}{field.required ? " *" : ""}
+                  </label>
+                  {field.type === "SELECT" ? (
+                    <select
+                      required={field.required}
+                      value={customFieldValues[field.id] ?? ""}
+                      onChange={e => setCustomFieldValues(previous => ({ ...previous, [field.id]: e.target.value }))}
+                      className="w-full bg-[#0f1115] border border-slate-700 rounded-lg p-3 text-white text-sm"
+                    >
+                      <option value="">Seleccionar...</option>
+                      {(field.options || []).map((option: string) => <option key={option} value={option}>{option}</option>)}
+                    </select>
+                  ) : field.type === "CHECKBOX" ? (
+                    <label className="flex items-center gap-2 bg-[#0f1115] border border-slate-700 rounded-lg p-3 text-sm text-white">
+                      <input
+                        type="checkbox"
+                        checked={customFieldValues[field.id] === "true"}
+                        onChange={e => setCustomFieldValues(previous => ({ ...previous, [field.id]: e.target.checked ? "true" : "false" }))}
+                      />
+                      Sí
+                    </label>
+                  ) : (
+                    <input
+                      type={field.type === "NUMBER" ? "number" : field.type === "DATE" ? "date" : "text"}
+                      required={field.required}
+                      value={customFieldValues[field.id] ?? ""}
+                      onChange={e => setCustomFieldValues(previous => ({ ...previous, [field.id]: e.target.value }))}
+                      className="w-full bg-[#0f1115] border border-slate-700 rounded-lg p-3 text-white text-sm"
+                    />
+                  )}
+                </div>
+              ))}
+
               <div className="md:col-span-2">
                 <label className="block text-xs font-medium text-slate-400 mb-1">
                   Imagen (Se ajustará a 800x800px)
@@ -878,6 +1111,16 @@ export default function DashboardPage() {
               }`}
           >
             <span>📦</span> Productos
+          </button>
+
+          <button
+            onClick={() => setActiveTab("campos")}
+            className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg font-medium transition ${activeTab === "campos"
+                ? "bg-emerald-500/10 text-emerald-400"
+                : "hover:bg-[#1a1e26] text-slate-400"
+              }`}
+          >
+            <span>🧩</span> Campos personalizados
           </button>
 
           <button
@@ -950,6 +1193,15 @@ export default function DashboardPage() {
         </button>
 
         <button
+          onClick={() => setActiveTab("campos")}
+          className={`flex flex-col items-center gap-1 ${activeTab === "campos" ? "text-emerald-400" : "text-slate-400"
+            }`}
+        >
+          <span>🧩</span>
+          <span className="text-[10px]">Campos</span>
+        </button>
+
+        <button
           onClick={() => setActiveTab("pedidos")}
           className={`flex flex-col items-center gap-1 ${activeTab === "pedidos" ? "text-emerald-400" : "text-slate-400"
             }`}
@@ -989,61 +1241,144 @@ export default function DashboardPage() {
           >
             Ver mi tienda ↗
           </Link>
-        </header>
-        {/* ESTADO DE SUSCRIPCIÓN */}
-        {store.subscription && (
-          <div className="mb-8 bg-[#15181e] border border-slate-800 rounded-xl p-5">
-            {store.subscription.status === "TRIAL" ? (
-              <>
-                <p className="text-emerald-400 font-bold">
-                  🎁 Período de prueba gratuito
-                </p>
-                <p className="text-slate-300 text-sm mt-2">
-                  Te quedan {store.subscription.daysRemaining} días de prueba.
-                </p>
-              </>
-            ) : store.subscription.status === "PRO" ? (
-              <>
-                <p className="text-emerald-400 font-bold">
-                  ⭐ Plan Pro activo
-                </p>
-                <p className="text-slate-300 text-sm mt-2">
-                  Vencimiento:{" "}
-                  {new Date(store.subscription.expiresAt).toLocaleDateString("es-PY")}
-                </p>
-              </>
-            ) : null}
-          </div>
-        )}
 
+          <button
+            onClick={handleCopyStoreLink}
+            className="bg-[#15181e] border border-slate-700 text-slate-200 px-4 py-2.5 md:px-5 md:py-3 rounded-lg font-bold hover:bg-slate-800 transition text-sm w-fit"
+          >
+            Copiar enlace
+          </button>
+        </header>
         {/* RESUMEN */}
         {activeTab === "resumen" && (
           <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
+            {/* INDICADORES PRINCIPALES */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+              <div className="bg-[#15181e] border border-slate-800 p-5 rounded-2xl">
+                <p className="text-slate-400 text-sm mb-2">Ventas de hoy</p>
+                <p className="text-2xl md:text-3xl font-bold text-emerald-400">{formatGs(todaySales)}</p>
+                <p className="text-xs text-slate-500 mt-2">Solo ventas confirmadas</p>
+              </div>
+              <div className="bg-[#15181e] border border-slate-800 p-5 rounded-2xl">
+                <p className="text-slate-400 text-sm mb-2">Pedidos de hoy</p>
+                <p className="text-3xl font-bold text-white">{todayOrders.length}</p>
+                <p className="text-xs text-slate-500 mt-2">Pedidos recibidos hoy</p>
+              </div>
+              <div className="bg-[#15181e] border border-slate-800 p-5 rounded-2xl">
+                <p className="text-slate-400 text-sm mb-2">Productos activos</p>
+                <p className="text-3xl font-bold text-white">{products.length}</p>
+                <p className="text-xs text-slate-500 mt-2">En tu catálogo</p>
+              </div>
+              <div className="bg-[#15181e] border border-slate-800 p-5 rounded-2xl">
+                <p className="text-slate-400 text-sm mb-2">Stock bajo</p>
+                <p className={`text-3xl font-bold ${lowStockProducts.length ? "text-amber-400" : "text-emerald-400"}`}>{lowStockProducts.length}</p>
+                <p className="text-xs text-slate-500 mt-2">Productos con 5 unidades o menos</p>
+              </div>
+            </div>
 
-              <div className="bg-[#15181e] border border-slate-800 p-6 rounded-2xl">
-                <p className="text-slate-400 text-sm mb-2 font-medium">
-                  Ventas de hoy
-                </p>
-                <p className="text-3xl font-bold text-white">$0.00</p>
+            {/* VENTAS DE LOS ÚLTIMOS 7 DÍAS */}
+            <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-5 md:p-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-6">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Ventas de los últimos 7 días</h2>
+                  <p className="text-xs text-slate-500 mt-1">Ingresos de pedidos confirmados</p>
+                </div>
+                <span className="text-sm text-emerald-400 font-semibold">
+                  {formatGs(lastSevenDays.reduce((sum, day) => sum + day.total, 0))}
+                </span>
+              </div>
+              <div className="grid grid-cols-7 gap-2 md:gap-4 items-end h-44">
+                {lastSevenDays.map((day, index) => (
+                  <div key={day.date.toISOString()} className="h-full flex flex-col items-center justify-end gap-2 min-w-0">
+                    <span className="text-[9px] md:text-[10px] text-slate-500 truncate max-w-full">
+                      {day.total > 0 ? day.total.toLocaleString("es-PY") : "—"}
+                    </span>
+                    <div className="w-full flex-1 flex items-end">
+                      <div
+                        className="w-full rounded-t-md bg-emerald-500/80 min-h-[3px] transition-all"
+                        style={{ height: `${day.total > 0 ? Math.max((day.total / maxDailySales) * 100, 5) : 2}%` }}
+                        title={formatGs(day.total)}
+                      />
+                    </div>
+                    <span className="text-[10px] text-slate-400 capitalize">{day.label}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* PEDIDOS RECIENTES */}
+              <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold text-white">Pedidos recientes</h2>
+                  <button onClick={() => setActiveTab("pedidos")} className="text-xs text-emerald-400 hover:text-emerald-300">Ver todos →</button>
+                </div>
+                {recentOrders.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-6 text-center">Todavía no hay pedidos.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {recentOrders.map(order => (
+                      <div key={order.id} className="flex items-center justify-between gap-3 border-b border-slate-800/70 pb-3 last:border-0 last:pb-0">
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-white truncate">{order.customerName || "Cliente"}</p>
+                          <p className="text-xs text-slate-500">#{String(order.id).slice(-8).toUpperCase()} · {new Date(order.createdAt).toLocaleDateString("es-PY")}</p>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <p className="text-sm font-semibold text-white">{formatGs(Number(order.total || 0))}</p>
+                          <span className={`text-[10px] font-bold ${order.status === "SOLD" ? "text-emerald-400" : order.status === "PENDING" ? "text-amber-400" : "text-red-400"}`}>
+                            {order.status === "SOLD" ? "Vendido" : order.status === "PENDING" ? "Pendiente" : "Cancelado"}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              <div className="bg-[#15181e] border border-slate-800 p-6 rounded-2xl">
-                <p className="text-slate-400 text-sm mb-2 font-medium">
-                  Visitas
-                </p>
-                <p className="text-3xl font-bold text-white">0</p>
+              {/* PRODUCTOS MÁS VENDIDOS */}
+              <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-5">
+                <h2 className="text-lg font-bold text-white mb-4">Productos más vendidos</h2>
+                {bestSellingProducts.length === 0 ? (
+                  <p className="text-sm text-slate-500 py-6 text-center">Todavía no hay ventas confirmadas.</p>
+                ) : (
+                  <div className="space-y-4">
+                    {bestSellingProducts.map((product, index) => (
+                      <div key={product.name}>
+                        <div className="flex justify-between gap-3 text-sm mb-2">
+                          <span className="text-slate-200 truncate">{index + 1}. {product.name}</span>
+                          <span className="text-emerald-400 font-semibold shrink-0">{product.quantity} u.</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-slate-800 overflow-hidden">
+                          <div className="h-full bg-emerald-500 rounded-full" style={{ width: `${(product.quantity / bestSellingProducts[0].quantity) * 100}%` }} />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
+            </div>
 
-              <div className="bg-[#15181e] border border-slate-800 p-6 rounded-2xl">
-                <p className="text-slate-400 text-sm mb-2 font-medium">
-                  Productos Activos
-                </p>
-                <p className="text-3xl font-bold text-white">
-                  {products.length}
-                </p>
+            {/* ALERTAS DE STOCK */}
+            <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-5">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-white">Alertas de inventario</h2>
+                  <p className="text-xs text-slate-500 mt-1">Productos que necesitan reposición</p>
+                </div>
+                <button onClick={() => setActiveTab("productos")} className="text-xs text-emerald-400 hover:text-emerald-300">Ir a productos →</button>
               </div>
-
+              {lowStockProducts.length === 0 ? (
+                <p className="text-sm text-emerald-400">✓ No hay productos con stock bajo.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {lowStockProducts.slice(0, 6).map(product => (
+                    <div key={product.id} className="flex justify-between items-center gap-3 bg-[#0f1115] rounded-lg p-3">
+                      <span className="text-sm text-slate-200 truncate">{product.name}</span>
+                      <span className="text-xs font-bold text-amber-400 shrink-0">{Number(product.stock)} u.</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1142,6 +1477,93 @@ export default function DashboardPage() {
                     ))}
                   </tbody>
                 </table>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* CAMPOS PERSONALIZADOS */}
+        {activeTab === "campos" && (
+          <div className="space-y-6">
+            <div>
+              <h2 className="text-xl md:text-2xl font-bold text-white">Campos personalizados</h2>
+              <p className="text-sm text-slate-400 mt-1">Creá atributos propios para tus productos, como talle, color, marca o vencimiento.</p>
+            </div>
+
+            <form onSubmit={handleSaveCustomField} className="bg-[#15181e] border border-slate-800 rounded-2xl p-5 md:p-6 space-y-4">
+              <h3 className="font-bold text-white">{editingFieldId ? "Editar campo" : "Crear nuevo campo"}</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Nombre del campo</label>
+                  <input
+                    required maxLength={50} value={fieldForm.name}
+                    onChange={e => setFieldForm(previous => ({ ...previous, name: e.target.value }))}
+                    placeholder="Ej. Color, Talle, Marca..."
+                    className="w-full bg-[#0f1115] border border-slate-700 rounded-lg p-3 text-white text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-400 mb-1">Tipo de dato</label>
+                  <select value={fieldForm.type} onChange={e => setFieldForm(previous => ({ ...previous, type: e.target.value }))}
+                    className="w-full bg-[#0f1115] border border-slate-700 rounded-lg p-3 text-white text-sm">
+                    <option value="TEXT">Texto</option>
+                    <option value="NUMBER">Número</option>
+                    <option value="SELECT">Selección</option>
+                    <option value="DATE">Fecha</option>
+                    <option value="CHECKBOX">Casilla</option>
+                  </select>
+                </div>
+                {fieldForm.type === "SELECT" && (
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-medium text-slate-400 mb-1">Opciones (separadas por coma)</label>
+                    <input value={fieldForm.options} onChange={e => setFieldForm(previous => ({ ...previous, options: e.target.value }))}
+                      placeholder="Ej. Rojo, Azul, Negro"
+                      className="w-full bg-[#0f1115] border border-slate-700 rounded-lg p-3 text-white text-sm" />
+                  </div>
+                )}
+              </div>
+              <div className="flex flex-col sm:flex-row gap-4 sm:gap-8">
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" checked={fieldForm.required} onChange={e => setFieldForm(previous => ({ ...previous, required: e.target.checked }))} /> Campo obligatorio
+                </label>
+                <label className="flex items-center gap-2 text-sm text-slate-300">
+                  <input type="checkbox" checked={fieldForm.showInStore} onChange={e => setFieldForm(previous => ({ ...previous, showInStore: e.target.checked }))} /> Mostrar en tienda pública
+                </label>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                <button type="submit" disabled={savingField} className="bg-emerald-500 text-black px-5 py-2.5 rounded-lg font-bold text-sm hover:bg-emerald-400 disabled:opacity-50">
+                  {savingField ? "Guardando..." : editingFieldId ? "Guardar cambios" : "+ Crear campo"}
+                </button>
+                {editingFieldId && <button type="button" onClick={() => { setEditingFieldId(null); setFieldForm({ name: "", type: "TEXT", options: "", required: false, showInStore: false }); }} className="px-5 py-2.5 rounded-lg text-sm text-slate-300 hover:bg-slate-800">Cancelar edición</button>}
+              </div>
+            </form>
+
+            <div className="bg-[#15181e] border border-slate-800 rounded-2xl overflow-hidden">
+              <div className="p-5 border-b border-slate-800">
+                <h3 className="font-bold text-white">Tus campos ({customFields.length})</h3>
+              </div>
+              {customFields.length === 0 ? (
+                <div className="p-8 text-center text-slate-500">Todavía no creaste campos personalizados.</div>
+              ) : (
+                <div className="divide-y divide-slate-800">
+                  {customFields.map((field: any) => (
+                    <div key={field.id} className="p-4 md:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div>
+                        <p className="font-semibold text-white">{field.name}</p>
+                        <div className="flex flex-wrap gap-2 mt-2 text-xs">
+                          <span className="bg-slate-800 text-slate-300 px-2 py-1 rounded">{({ TEXT: "Texto", NUMBER: "Número", SELECT: "Selección", DATE: "Fecha", CHECKBOX: "Casilla" } as Record<string, string>)[field.type] || field.type}</span>
+                          {field.required && <span className="bg-amber-500/10 text-amber-400 px-2 py-1 rounded">Obligatorio</span>}
+                          <span className={field.showInStore ? "bg-emerald-500/10 text-emerald-400 px-2 py-1 rounded" : "bg-slate-800 text-slate-400 px-2 py-1 rounded"}>{field.showInStore ? "Visible en tienda" : "Oculto en tienda"}</span>
+                        </div>
+                        {field.type === "SELECT" && <p className="text-xs text-slate-500 mt-2">Opciones: {(field.options || []).join(", ")}</p>}
+                      </div>
+                      <div className="flex gap-2 shrink-0">
+                        <button type="button" onClick={() => handleEditCustomField(field)} className="text-blue-400 bg-blue-400/10 px-3 py-2 rounded text-xs font-semibold">Editar</button>
+                        <button type="button" onClick={() => handleDeleteCustomField(field.id)} className="text-red-400 bg-red-400/10 px-3 py-2 rounded text-xs font-semibold">Eliminar</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
             </div>
           </div>
@@ -1292,6 +1714,32 @@ export default function DashboardPage() {
         {/* AJUSTES */}
         {activeTab === "ajustes" && (
           <div className="space-y-8">
+
+            {/* ESTADO DE SUSCRIPCIÓN */}
+            {store.subscription && (
+              <div className="bg-[#15181e] border border-slate-800 rounded-xl p-5">
+                {store.subscription.status === "TRIAL" ? (
+                  <>
+                    <p className="text-emerald-400 font-bold">
+                      🎁 Período de prueba gratuito
+                    </p>
+                    <p className="text-slate-300 text-sm mt-2">
+                      Te quedan {store.subscription.daysRemaining} días de prueba.
+                    </p>
+                  </>
+                ) : store.subscription.status === "PRO" ? (
+                  <>
+                    <p className="text-emerald-400 font-bold">
+                      ⭐ Plan Pro activo
+                    </p>
+                    <p className="text-slate-300 text-sm mt-2">
+                      Vencimiento:{" "}
+                      {new Date(store.subscription.expiresAt).toLocaleDateString("es-PY")}
+                    </p>
+                  </>
+                ) : null}
+              </div>
+            )}
 
             {/* LOGO */}
             <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-6 md:p-8">

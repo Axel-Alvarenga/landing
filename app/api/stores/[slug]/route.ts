@@ -14,7 +14,26 @@ export async function GET(
 
     const store = await prisma.store.findUnique({
       where: { slug },
-      include: { products: true }
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        category: true,
+        template: true,
+        logoUrl: true,
+        whatsapp: true,
+
+        products: {
+          select: {
+            id: true,
+            name: true,
+            price: true,
+            stock: true,
+            imageUrl: true,
+            category: true,
+          },
+        },
+      },
     });
 
     if (!store) {
@@ -25,6 +44,7 @@ export async function GET(
     }
 
     return NextResponse.json(store);
+
   } catch (error) {
     console.error("Error al consultar tienda:", error);
 
@@ -72,8 +92,8 @@ export async function PUT(
     const store = await prisma.store.findFirst({
       where: {
         slug,
-        userId: data.user.id
-      }
+        userId: data.user.id,
+      },
     });
 
     if (!store) {
@@ -88,7 +108,10 @@ export async function PUT(
 
     if (!subscription.canManage) {
       return NextResponse.json(
-        { error: "Tu suscripción no permite modificar la tienda. Renovala para continuar." },
+        {
+          error:
+            "Tu suscripción no permite modificar la tienda. Renovala para continuar.",
+        },
         { status: 403 }
       );
     }
@@ -102,7 +125,10 @@ export async function PUT(
     } = {};
 
     if (body.template !== undefined) {
-      if (typeof body.template !== "string" || !body.template.trim()) {
+      if (
+        typeof body.template !== "string" ||
+        !body.template.trim()
+      ) {
         return NextResponse.json(
           { error: "Diseño inválido" },
           { status: 400 }
@@ -136,10 +162,16 @@ export async function PUT(
       );
     }
 
-    // 5. Actualizar tienda
+    // 5. Actualizar tienda sin devolver información privada
     const updatedStore = await prisma.store.update({
       where: { id: store.id },
-      data: updateData
+      data: updateData,
+      select: {
+        id: true,
+        slug: true,
+        template: true,
+        logoUrl: true,
+      },
     });
 
     return NextResponse.json(updatedStore);

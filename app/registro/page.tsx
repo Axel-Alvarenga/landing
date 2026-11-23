@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useRef, useEffect } from "react";
@@ -8,10 +7,54 @@ import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 const categories = [
   "Gastronomía",
+  "Restaurante",
+  "Comida rápida",
+  "Cafetería",
+  "Panadería y confitería",
+  "Pastelería y repostería",
+  "Heladería",
+  "Bebidas y jugos",
+  "Almacén y minimercado",
+  "Supermercado",
+  "Carnicería",
+  "Pollería",
+  "Pescadería",
+  "Frutería y verdulería",
+  "Indumentaria",
   "Remeras y Jeans",
-  "Relojes",
+  "Calzados",
   "Zapatos",
   "Ropa Interior",
+  "Accesorios y bijouterie",
+  "Relojes",
+  "Joyería",
+  "Perfumería",
+  "Cosmética y maquillaje",
+  "Peluquería y barbería",
+  "Estética y uñas",
+  "Electrónica",
+  "Celulares y accesorios",
+  "Informática",
+  "Electrodomésticos",
+  "Hogar y decoración",
+  "Muebles",
+  "Bazar y artículos de cocina",
+  "Ferretería",
+  "Construcción",
+  "Librería y papelería",
+  "Juguetería",
+  "Deportes",
+  "Mascotas",
+  "Repuestos y accesorios para vehículos",
+  "Bicicletería",
+  "Regalos",
+  "Florería",
+  "Artesanías",
+  "Agro y jardinería",
+  "Farmacia",
+  "Óptica",
+  "Servicios profesionales",
+  "Otros",
 ];
 
 const countries = [
@@ -59,6 +102,12 @@ const templatesData: Record<
     { id: "rl3", name: "Deportivo", color: "bg-blue-900", textColor: "text-white" },
     { id: "rl4", name: "Elegante", color: "bg-stone-800", textColor: "text-stone-200" },
   ],
+  "Calzados": [
+    { id: "z1", name: "Sneakers", color: "bg-white border-slate-200", textColor: "text-black" },
+    { id: "z2", name: "Formal", color: "bg-slate-800", textColor: "text-white" },
+    { id: "z3", name: "Deportivo", color: "bg-lime-400", textColor: "text-black" },
+    { id: "z4", name: "Casual", color: "bg-amber-800", textColor: "text-amber-50" },
+  ],
   "Zapatos": [
     { id: "z1", name: "Sneakers", color: "bg-white border-slate-200", textColor: "text-black" },
     { id: "z2", name: "Formal", color: "bg-slate-800", textColor: "text-white" },
@@ -99,21 +148,29 @@ export default function RegistroPage() {
 
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [isCategoryDropdownOpen, setIsCategoryDropdownOpen] = useState(false);
+  const [categorySearch, setCategorySearch] = useState("");
 
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const categoryDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(event.target as Node)
-      ) {
+      const target = event.target as Node;
+
+      if (dropdownRef.current && !dropdownRef.current.contains(target)) {
         setIsDropdownOpen(false);
+      }
+
+      if (
+        categoryDropdownRef.current &&
+        !categoryDropdownRef.current.contains(target)
+      ) {
+        setIsCategoryDropdownOpen(false);
       }
     }
 
     document.addEventListener("mousedown", handleClickOutside);
-
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
@@ -121,6 +178,10 @@ export default function RegistroPage() {
     (c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       c.dial.includes(searchQuery)
+  );
+
+  const filteredCategories = categories.filter((category) =>
+    category.toLowerCase().includes(categorySearch.toLowerCase().trim())
   );
 
   const handleSelectCountry = (country: (typeof countries)[0]) => {
@@ -242,8 +303,7 @@ export default function RegistroPage() {
           // Cuenta nueva con sesión inmediata.
           accessToken = signupData.session.access_token;
         } else {
-          // Supabase puede no devolver sesión cuando el correo ya existe
-          // o cuando requiere confirmar el correo.
+          // Supabase puede no devolver sesión cuando requiere confirmar el correo.
           const { data: loginData, error: loginError } =
             await supabase.auth.signInWithPassword({
               email,
@@ -297,7 +357,6 @@ export default function RegistroPage() {
         );
 
         alert("Ya tenés una tienda registrada. Ingresando a tu panel.");
-
         window.location.href = "/dashboard";
         return;
       }
@@ -315,9 +374,7 @@ export default function RegistroPage() {
 
       // 6. Guardar la tienda y entrar al Dashboard.
       localStorage.setItem("currentStoreSlug", responseData.slug);
-
       window.location.href = "/dashboard";
-
     } catch (error) {
       console.error("Error al crear tienda:", error);
       alert("Hubo un error inesperado al crear la tienda.");
@@ -361,25 +418,67 @@ export default function RegistroPage() {
               className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
               placeholder="Nombre de tu tienda"
               value={form.name}
-              onChange={(e) =>
-                setForm({ ...form, name: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
             />
 
-            <select
-              className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:outline-none focus:ring-2 focus:ring-emerald-500 appearance-none"
-              value={form.category}
-              onChange={(e) =>
-                setForm({ ...form, category: e.target.value })
-              }
-            >
-              <option value="">Elegí una categoría</option>
-              {categories.map((c) => (
-                <option key={c} value={c}>
-                  {c}
-                </option>
-              ))}
-            </select>
+            {/* BUSCADOR DE RUBROS */}
+            <div className="relative" ref={categoryDropdownRef}>
+              <input
+                type="text"
+                placeholder="Buscar rubro de tu negocio..."
+                value={categorySearch}
+                onFocus={() => setIsCategoryDropdownOpen(true)}
+                onChange={(e) => {
+                  setCategorySearch(e.target.value);
+                  setIsCategoryDropdownOpen(true);
+                  setForm({ ...form, category: "" });
+                }}
+                className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+
+              {isCategoryDropdownOpen && (
+                <div className="absolute top-full left-0 right-0 mt-2 bg-[#15181e] border border-slate-700 rounded-lg shadow-xl z-50 overflow-hidden">
+                  <div className="max-h-64 overflow-y-auto">
+                    {filteredCategories.length > 0 ? (
+                      filteredCategories.map((category) => (
+                        <button
+                          key={category}
+                          type="button"
+                          onClick={() => {
+                            setForm({ ...form, category });
+                            setCategorySearch(category);
+                            setIsCategoryDropdownOpen(false);
+                          }}
+                          className={`w-full text-left px-4 py-3 text-sm hover:bg-[#202630] transition ${
+                            form.category === category
+                              ? "text-emerald-400 bg-[#202630]"
+                              : "text-slate-300"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center">
+                            <span>{category}</span>
+                            {form.category === category && (
+                              <span className="text-emerald-400">✓</span>
+                            )}
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="p-4 text-sm text-slate-500">
+                        No encontramos ese rubro. Probá con otra búsqueda o
+                        seleccioná "Otros".
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {form.category && (
+                <p className="text-xs text-emerald-400 mt-2">
+                  ✓ Rubro seleccionado: {form.category}
+                </p>
+              )}
+            </div>
           </div>
         )}
 
@@ -395,9 +494,7 @@ export default function RegistroPage() {
                 placeholder="Email"
                 type="email"
                 value={form.email}
-                onChange={(e) =>
-                  setForm({ ...form, email: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
               />
 
               {isEmailInvalid && (
@@ -412,9 +509,7 @@ export default function RegistroPage() {
               placeholder="Contraseña (min. 6)"
               type="password"
               value={form.password}
-              onChange={(e) =>
-                setForm({ ...form, password: e.target.value })
-              }
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
             />
 
             <div className="flex gap-2">
@@ -450,9 +545,7 @@ export default function RegistroPage() {
                         placeholder="Buscar..."
                         className="w-full bg-[#0f1115] border border-slate-700 rounded-md p-2 text-sm text-white"
                         value={searchQuery}
-                        onChange={(e) =>
-                          setSearchQuery(e.target.value)
-                        }
+                        onChange={(e) => setSearchQuery(e.target.value)}
                       />
                     </div>
 
@@ -470,9 +563,7 @@ export default function RegistroPage() {
                             alt={c.name}
                           />
 
-                          <span className="text-sm flex-1">
-                            {c.name}
-                          </span>
+                          <span className="text-sm flex-1">{c.name}</span>
 
                           <span className="text-xs text-slate-500">
                             {c.dial}
@@ -488,9 +579,7 @@ export default function RegistroPage() {
                 className="w-full bg-[#15181e] border border-slate-700 rounded-lg p-3 text-white focus:ring-2 focus:ring-emerald-500"
                 placeholder="Número de WhatsApp"
                 value={form.whatsapp}
-                onChange={(e) =>
-                  setForm({ ...form, whatsapp: e.target.value })
-                }
+                onChange={(e) => setForm({ ...form, whatsapp: e.target.value })}
               />
             </div>
           </div>
@@ -514,9 +603,7 @@ export default function RegistroPage() {
                 <button
                   key={t.id}
                   type="button"
-                  onClick={() =>
-                    setForm({ ...form, template: t.id })
-                  }
+                  onClick={() => setForm({ ...form, template: t.id })}
                   className={`relative w-full text-left border-2 rounded-xl overflow-hidden transition-all ${
                     form.template === t.id
                       ? "border-emerald-500 bg-[#1a1e26]"
@@ -597,6 +684,7 @@ export default function RegistroPage() {
             <div className="bg-[#15181e] border border-slate-700 p-5 rounded-xl text-sm space-y-3 text-slate-300">
               <p>📧 {form.email}</p>
               <p>📱 {form.countryCode} {form.whatsapp}</p>
+              <p>🏷️ Rubro: {form.category}</p>
               <p>🎨 Template: {form.template}</p>
             </div>
           </div>

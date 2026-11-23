@@ -63,6 +63,33 @@ async function getManageableProduct(id: string, userId: string) {
   };
 }
 
+// Validar valores de campos personalizados
+function validateCustomFieldValue(
+  type: string,
+  value: string,
+  options: string[]
+) {
+  switch (type) {
+    case "TEXT":
+      return true;
+
+    case "NUMBER":
+      return value.trim() !== "" && Number.isFinite(Number(value));
+
+    case "SELECT":
+      return options.includes(value);
+
+    case "DATE":
+      return !Number.isNaN(Date.parse(value));
+
+    case "CHECKBOX":
+      return value === "true" || value === "false";
+
+    default:
+      return false;
+  }
+}
+
 // ELIMINAR PRODUCTO
 export async function DELETE(
   req: Request,
@@ -123,8 +150,16 @@ export async function PUT(
     const { id } = await params;
     const body = await req.json();
 
-    const { name, price, stock, imageUrl, category } = body;
+    const {
+      name,
+      price,
+      stock,
+      imageUrl,
+      category,
+      customFieldValues
+    } = body;
 
+    // Validar datos básicos
     if (
       typeof name !== "string" ||
       !name.trim() ||
@@ -148,21 +183,158 @@ export async function PUT(
       );
     }
 
-    const updatedProduct = await prisma.product.update({
-      where: { id },
-      data: {
-        name: name.trim(),
-        price: Number(price),
-        stock: Number(stock),
-        imageUrl:
-          typeof imageUrl === "string" && imageUrl.trim()
-            ? imageUrl.trim()
-            : null,
-        category:
-          typeof category === "string" && category.trim()
-            ? category.trim()
-            : "General"
+    const product = result.product;
+
+    // Si se enviaron campos personalizados, validarlos
+    if (customFieldValues !== undefined) {
+      if (!Array.isArray(customFieldValues)) {
+        return NextResponse.json(
+          { error: "Los campos personalizados no son válidos" },
+          { status: 400 }
+        );
       }
+
+      const receivedFieldIds = customFieldValues.map(
+        (item: any) => item?.fieldId
+      );
+
+      if (
+        receivedFieldIds.some((fieldId: any) => typeof fieldId !== "string") ||
+        new Set(receivedFieldIds).size !== receivedFieldIds.length
+      ) {
+        return NextResponse.json(
+          { error: "Hay campos personalizados duplicados o inválidos" },
+          { status: 400 }
+        );
+      }
+
+      const fields = await prisma.customField.findMany({
+        where: {
+          storeId: product.storeId
+        }
+      });
+
+      // Comprobar que todos los campos pertenezcan a esta tienda
+      const fieldsMap = new Map(
+        fields.map(field => [field.id, field])
+      );
+
+      for (const item of customFieldValues) {
+        if (
+          !item ||
+          typeof item.fieldId !== "string" ||
+          typeof item.value !== "string"
+        ) {
+          return NextResponse.json(
+            { error: "Valor de campo personalizado inválido" },
+            { status: 400 }
+          );
+        }
+
+        const field = fieldsMap.get(item.fieldId);
+
+        if (!field) {
+          return NextResponse.json(
+            { error: "Uno de los campos no pertenece a esta tienda" },
+            { status: 400 }
+          );
+        }
+
+        if (
+          item.value.trim() === "" &&
+          field.required
+        ) {
+          return NextResponse.json(
+            { error: `El campo "${field.name}" es obligatorio` },
+            { status: 400 }
+          );
+        }
+
+        if (
+          item.value.trim() !== "" &&
+          !validateCustomFieldValue(
+            field.type,
+            item.value,
+            field.options
+          )
+        ) {
+          return NextResponse.json(
+            { error: `El valor del campo "${field.name}" no es válido` },
+            { status: 400 }
+          );
+        }
+      }
+
+      // Comprobar que estén presentes todos los campos obligatorios
+      for (const field of fields) {
+        if (
+          field.required &&
+          !customFieldValues.some(
+            (item: any) =>
+              item.fieldId === field.id &&
+              item.value.trim() !== ""
+          )
+        ) {
+          return NextResponse.json(
+            { error: `El campo "${field.name}" es obligatorio` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
+    // Actualizar producto y sus valores en una transacción
+    const updatedProduct = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id },
+        data: {
+          name: name.trim(),
+          price: Number(price),
+          stock: Number(stock),
+          imageUrl:
+            typeof imageUrl === "string" && imageUrl.trim()
+              ? imageUrl.trim()
+              : null,
+          category:
+            typeof category === "string" && category.trim()
+              ? category.trim()
+              : "General"
+        }
+      });
+
+      // Solo reemplazar los valores si fueron enviados
+      if (customFieldValues !== undefined) {
+        await tx.productCustomFieldValue.deleteMany({
+          where: {
+            productId: id
+          }
+        });
+
+        const valuesToSave = customFieldValues.filter(
+          (item: any) => item.value.trim() !== ""
+        );
+
+        if (valuesToSave.length > 0) {
+          await tx.productCustomFieldValue.createMany({
+            data: valuesToSave.map((item: any) => ({
+              productId: id,
+              fieldId: item.fieldId,
+              value: item.value.trim()
+            }))
+          });
+        }
+      }
+
+      return tx.product.findUnique({
+        where: { id: updated.id },
+        include: {
+          customFieldValues: {
+            include: {
+              field: true
+            }
+          }
+        }
+      });
     });
 
     return NextResponse.json(updatedProduct);
