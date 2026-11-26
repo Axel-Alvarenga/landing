@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
@@ -9,9 +8,7 @@ async function getAuthenticatedUser(req: Request) {
   const authHeader = req.headers.get("Authorization");
   const token = authHeader?.replace("Bearer ", "");
 
-  if (!token) {
-    return null;
-  }
+  if (!token) return null;
 
   const supabaseAuth = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -20,9 +17,7 @@ async function getAuthenticatedUser(req: Request) {
 
   const { data, error } = await supabaseAuth.auth.getUser(token);
 
-  if (error || !data.user) {
-    return null;
-  }
+  if (error || !data.user) return null;
 
   return data.user;
 }
@@ -33,19 +28,23 @@ async function getManageableProduct(id: string, userId: string) {
     where: {
       id,
       store: {
-        userId
-      }
+        userId,
+      },
     },
     include: {
-      store: true
-    }
+      // 👇 traemos solo lo necesario de la tienda (no la entidad completa)
+      store: {
+        select: {
+          trialEndsAt: true,
+          subscriptionEndsAt: true,
+          planActivatedAt: true,
+        },
+      },
+    },
   });
 
   if (!product) {
-    return {
-      product: null,
-      error: "Producto no encontrado o sin permisos"
-    };
+    return { product: null, error: "Producto no encontrado o sin permisos" };
   }
 
   const subscription = getSubscriptionInfo(product.store);
@@ -53,14 +52,12 @@ async function getManageableProduct(id: string, userId: string) {
   if (!subscription.canManage) {
     return {
       product: null,
-      error: "Tu suscripción no permite modificar productos. Renovala para continuar."
+      error:
+        "Tu suscripción no permite modificar productos. Renovala para continuar.",
     };
   }
 
-  return {
-    product,
-    error: null
-  };
+  return { product, error: null };
 }
 
 // Validar valores de campos personalizados
@@ -72,19 +69,14 @@ function validateCustomFieldValue(
   switch (type) {
     case "TEXT":
       return true;
-
     case "NUMBER":
       return value.trim() !== "" && Number.isFinite(Number(value));
-
     case "SELECT":
       return options.includes(value);
-
     case "DATE":
       return !Number.isNaN(Date.parse(value));
-
     case "CHECKBOX":
       return value === "true" || value === "false";
-
     default:
       return false;
   }
@@ -99,10 +91,7 @@ export async function DELETE(
     const user = await getAuthenticatedUser(req);
 
     if (!user) {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
     const { id } = await params;
@@ -116,12 +105,9 @@ export async function DELETE(
       );
     }
 
-    await prisma.product.delete({
-      where: { id }
-    });
+    await prisma.product.delete({ where: { id } });
 
     return NextResponse.json({ success: true });
-
   } catch (error) {
     console.error("Error al eliminar producto:", error);
 
@@ -141,25 +127,15 @@ export async function PUT(
     const user = await getAuthenticatedUser(req);
 
     if (!user) {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
     const { id } = await params;
     const body = await req.json();
 
-    const {
-      name,
-      price,
-      stock,
-      imageUrl,
-      category,
-      customFieldValues
-    } = body;
+    const { name, price, stock, imageUrl, category, customFieldValues } = body;
 
-    // Validar datos básicos
+    // Validar datos básicos ANTES de tocar la DB
     if (
       typeof name !== "string" ||
       !name.trim() ||
@@ -209,15 +185,10 @@ export async function PUT(
       }
 
       const fields = await prisma.customField.findMany({
-        where: {
-          storeId: product.storeId
-        }
+        where: { storeId: product.storeId },
       });
 
-      // Comprobar que todos los campos pertenezcan a esta tienda
-      const fieldsMap = new Map(
-        fields.map(field => [field.id, field])
-      );
+      const fieldsMap = new Map(fields.map((field) => [field.id, field]));
 
       for (const item of customFieldValues) {
         if (
@@ -240,10 +211,7 @@ export async function PUT(
           );
         }
 
-        if (
-          item.value.trim() === "" &&
-          field.required
-        ) {
+        if (item.value.trim() === "" && field.required) {
           return NextResponse.json(
             { error: `El campo "${field.name}" es obligatorio` },
             { status: 400 }
@@ -252,11 +220,7 @@ export async function PUT(
 
         if (
           item.value.trim() !== "" &&
-          !validateCustomFieldValue(
-            field.type,
-            item.value,
-            field.options
-          )
+          !validateCustomFieldValue(field.type, item.value, field.options)
         ) {
           return NextResponse.json(
             { error: `El valor del campo "${field.name}" no es válido` },
@@ -265,14 +229,11 @@ export async function PUT(
         }
       }
 
-      // Comprobar que estén presentes todos los campos obligatorios
       for (const field of fields) {
         if (
           field.required &&
           !customFieldValues.some(
-            (item: any) =>
-              item.fieldId === field.id &&
-              item.value.trim() !== ""
+            (item: any) => item.fieldId === field.id && item.value.trim() !== ""
           )
         ) {
           return NextResponse.json(
@@ -283,62 +244,47 @@ export async function PUT(
       }
     }
 
-    // Actualizar producto y sus valores en una transacción
-    const updatedProduct = await prisma.$transaction(async (tx) => {
-      const updated = await tx.product.update({
-        where: { id },
-        data: {
-          name: name.trim(),
-          price: Number(price),
-          stock: Number(stock),
-          imageUrl:
-            typeof imageUrl === "string" && imageUrl.trim()
-              ? imageUrl.trim()
-              : null,
-          category:
-            typeof category === "string" && category.trim()
-              ? category.trim()
-              : "General"
-        }
-      });
-
-      // Solo reemplazar los valores si fueron enviados
-      if (customFieldValues !== undefined) {
-        await tx.productCustomFieldValue.deleteMany({
-          where: {
-            productId: id
-          }
-        });
-
-        const valuesToSave = customFieldValues.filter(
-          (item: any) => item.value.trim() !== ""
-        );
-
-        if (valuesToSave.length > 0) {
-          await tx.productCustomFieldValue.createMany({
-            data: valuesToSave.map((item: any) => ({
-              productId: id,
-              fieldId: item.fieldId,
-              value: item.value.trim()
-            }))
-          });
-        }
-      }
-
-      return tx.product.findUnique({
-        where: { id: updated.id },
-        include: {
-          customFieldValues: {
-            include: {
-              field: true
+    // Actualizar producto en UNA sola operación atómica.
+    // El `deleteMany` + `create` anidados los resuelve Prisma sin timeout interactivo.
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data: {
+        name: name.trim(),
+        price: Number(price),
+        stock: Number(stock),
+        imageUrl:
+          typeof imageUrl === "string" && imageUrl.trim()
+            ? imageUrl.trim()
+            : null,
+        category:
+          typeof category === "string" && category.trim()
+            ? category.trim()
+            : "General",
+        // Solo reemplazamos si vinieron campos
+        ...(customFieldValues !== undefined
+          ? {
+              customFieldValues: {
+                deleteMany: {}, // borra todos los valores del producto
+                create: customFieldValues
+                  .filter((item: any) => item.value.trim() !== "")
+                  .map((item: any) => ({
+                    fieldId: item.fieldId,
+                    value: item.value.trim(),
+                  })),
+              },
             }
-          }
-        }
-      });
+          : {}),
+      },
+      include: {
+        customFieldValues: {
+          include: {
+            field: true,
+          },
+        },
+      },
     });
 
     return NextResponse.json(updatedProduct);
-
   } catch (error) {
     console.error("Error al actualizar producto:", error);
 

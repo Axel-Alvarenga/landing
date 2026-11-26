@@ -182,7 +182,36 @@ export async function POST(req: Request) {
       });
     });
 
-    return NextResponse.json(order, { status: 201 });
+    // 4. ARMAR EL MENSAJE DE WHATSAPP EN EL SERVIDOR
+    const formatGs = (amount: number) =>
+      `Gs. ${Number(amount || 0).toLocaleString("es-PY")}`;
+
+    let message = `PEDIDO - ${store.name}\n\n`;
+    message += `DATOS DEL CLIENTE\n`;
+    message += `Nombre: ${sanitizedCustomerName}\n`;
+    message += `Método de pago: ${paymentMethod.trim()}\n\n`;
+    message += `DETALLE DEL PEDIDO\n\n`;
+
+    order.items.forEach((item) => {
+      message += `${item.quantity} x ${item.productName}\n`;
+      message += `Subtotal: ${formatGs(item.subtotal)}\n\n`;
+    });
+
+    message += `TOTAL DEL PEDIDO: ${formatGs(order.total)}\n\n`;
+    message += `Número de pedido: ${order.id}\n\n`;
+    message += `Quedo atento a la confirmación del pedido. Muchas gracias.`;
+
+    const whatsappPhone = store.whatsapp.replace(/\D/g, "");
+
+    // 5. Devolver la orden + datos seguros de WhatsApp
+    return NextResponse.json(
+      {
+        ...order,
+        whatsappPhone,
+        whatsappMessage: message
+      },
+      { status: 201 }
+    );
 
   } catch (error) {
     console.error("Error al registrar pedido:", error);

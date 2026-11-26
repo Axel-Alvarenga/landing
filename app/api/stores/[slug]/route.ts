@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
@@ -23,6 +22,20 @@ export async function GET(
         logoUrl: true,
         whatsapp: true,
 
+        // 👇 Solo campos visibles en la tienda pública
+        customFields: {
+          where: { showInStore: true },
+          orderBy: { sortOrder: "asc" },
+          select: {
+            id: true,
+            name: true,
+            type: true,
+            options: true,
+            required: true,
+            sortOrder: true,
+          },
+        },
+
         products: {
           select: {
             id: true,
@@ -31,6 +44,14 @@ export async function GET(
             stock: true,
             imageUrl: true,
             category: true,
+
+            // 👇 Valores de campos personalizados de cada producto
+            customFieldValues: {
+              select: {
+                fieldId: true,
+                value: true,
+              },
+            },
           },
         },
       },

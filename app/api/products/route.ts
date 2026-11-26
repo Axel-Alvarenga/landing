@@ -1,4 +1,3 @@
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
@@ -13,19 +12,14 @@ function validateCustomFieldValue(
   switch (type) {
     case "TEXT":
       return true;
-
     case "NUMBER":
       return value.trim() !== "" && Number.isFinite(Number(value));
-
     case "SELECT":
       return options.includes(value);
-
     case "DATE":
       return value.trim() !== "" && !Number.isNaN(Date.parse(value));
-
     case "CHECKBOX":
       return value === "true" || value === "false";
-
     default:
       return false;
   }
@@ -38,10 +32,7 @@ export async function POST(req: Request) {
     const token = authHeader?.replace("Bearer ", "");
 
     if (!token) {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
     const supabaseAuth = createClient(
@@ -52,24 +43,14 @@ export async function POST(req: Request) {
     const { data, error } = await supabaseAuth.auth.getUser(token);
 
     if (error || !data.user) {
-      return NextResponse.json(
-        { error: "Sesión inválida" },
-        { status: 401 }
-      );
+      return NextResponse.json({ error: "Sesión inválida" }, { status: 401 });
     }
 
     // 2. Obtener datos
     const body = await req.json();
 
-    const {
-      storeId,
-      name,
-      price,
-      stock,
-      imageUrl,
-      category,
-      customFieldValues
-    } = body;
+    const { storeId, name, price, stock, imageUrl, category, customFieldValues } =
+      body;
 
     if (
       !storeId ||
@@ -86,12 +67,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // 3. Verificar que la tienda pertenezca al usuario
+    // 3. Verificar tienda + traer custom fields en una sola query
     const store = await prisma.store.findFirst({
       where: {
         id: storeId,
-        userId: data.user.id
-      }
+        userId: data.user.id,
+      },
+      include: {
+        customFields: true, // 👈 una sola query en vez de dos
+      },
     });
 
     if (!store) {
@@ -107,7 +91,8 @@ export async function POST(req: Request) {
     if (!subscription.canManage) {
       return NextResponse.json(
         {
-          error: "Tu suscripción no permite modificar productos. Renovala para continuar."
+          error:
+            "Tu suscripción no permite modificar productos. Renovala para continuar.",
         },
         { status: 403 }
       );
@@ -123,14 +108,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const receivedFieldIds = values.map(
-      (item: any) => item?.fieldId
-    );
+    const receivedFieldIds = values.map((item: any) => item?.fieldId);
 
     if (
-      receivedFieldIds.some(
-        (fieldId: any) => typeof fieldId !== "string"
-      ) ||
+      receivedFieldIds.some((fieldId: any) => typeof fieldId !== "string") ||
       new Set(receivedFieldIds).size !== receivedFieldIds.length
     ) {
       return NextResponse.json(
@@ -139,16 +120,9 @@ export async function POST(req: Request) {
       );
     }
 
-    // 6. Obtener campos definidos para esta tienda
-    const fields = await prisma.customField.findMany({
-      where: {
-        storeId
-      }
-    });
-
-    const fieldsMap = new Map(
-      fields.map(field => [field.id, field])
-    );
+    // 6. Los fields ya vienen incluidos en `store`
+    const fields = store.customFields;
+    const fieldsMap = new Map(fields.map((field) => [field.id, field]));
 
     // 7. Validar cada valor recibido
     for (const item of values) {
@@ -172,10 +146,7 @@ export async function POST(req: Request) {
         );
       }
 
-      if (
-        item.value.trim() === "" &&
-        field.required
-      ) {
+      if (item.value.trim() === "" && field.required) {
         return NextResponse.json(
           { error: `El campo "${field.name}" es obligatorio` },
           { status: 400 }
@@ -184,11 +155,7 @@ export async function POST(req: Request) {
 
       if (
         item.value.trim() !== "" &&
-        !validateCustomFieldValue(
-          field.type,
-          item.value,
-          field.options
-        )
+        !validateCustomFieldValue(field.type, item.value, field.options)
       ) {
         return NextResponse.json(
           { error: `El valor del campo "${field.name}" no es válido` },
@@ -202,9 +169,7 @@ export async function POST(req: Request) {
       if (
         field.required &&
         !values.some(
-          (item: any) =>
-            item.fieldId === field.id &&
-            item.value.trim() !== ""
+          (item: any) => item.fieldId === field.id && item.value.trim() !== ""
         )
       ) {
         return NextResponse.json(
@@ -214,46 +179,40 @@ export async function POST(req: Request) {
       }
     }
 
-    // 9. Crear producto y guardar sus campos personalizados
-    const product = await prisma.$transaction(async (tx) => {
-      return tx.product.create({
-        data: {
-          storeId,
-          name: name.trim(),
-          price: Number(price),
-          stock: Number(stock),
-
-          imageUrl:
-            typeof imageUrl === "string" && imageUrl.trim()
-              ? imageUrl.trim()
-              : null,
-
-          category:
-            typeof category === "string" && category.trim()
-              ? category.trim()
-              : "General",
-
-          customFieldValues: {
-            create: values
-              .filter((item: any) => item.value.trim() !== "")
-              .map((item: any) => ({
-                fieldId: item.fieldId,
-                value: item.value.trim()
-              }))
-          }
+    // 9. Crear producto con `create` anidado (atómico, SIN timeout interactivo)
+    const product = await prisma.product.create({
+      data: {
+        storeId,
+        name: name.trim(),
+        price: Number(price),
+        stock: Number(stock),
+        imageUrl:
+          typeof imageUrl === "string" && imageUrl.trim()
+            ? imageUrl.trim()
+            : null,
+        category:
+          typeof category === "string" && category.trim()
+            ? category.trim()
+            : "General",
+        customFieldValues: {
+          create: values
+            .filter((item: any) => item.value.trim() !== "")
+            .map((item: any) => ({
+              fieldId: item.fieldId,
+              value: item.value.trim(),
+            })),
         },
-        include: {
-          customFieldValues: {
-            include: {
-              field: true
-            }
-          }
-        }
-      });
+      },
+      include: {
+        customFieldValues: {
+          include: {
+            field: true,
+          },
+        },
+      },
     });
 
     return NextResponse.json(product);
-
   } catch (error) {
     console.error("Error al crear producto:", error);
 
