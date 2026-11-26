@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { useDashboard } from "@/hooks/dashboard/useDashboard";
 import { useProducts } from "@/hooks/dashboard/useProducts";
 import { useOrders } from "@/hooks/dashboard/useOrders";
@@ -20,6 +21,7 @@ import { CustomFieldsSection } from "@/components/dashboard/CustomFieldsSection"
 import { StoreSettingsSection } from "@/components/dashboard/StoreSettingsSection";
 import { ProductModal } from "@/components/dashboard/ProductModal";
 import { TemplatePreviewModal } from "@/components/dashboard/TemplatePreviewModal";
+import { StoreQRModal } from "@/components/dashboard/StoreQRModal";
 
 export default function DashboardPage() {
   const {
@@ -62,7 +64,13 @@ export default function DashboardPage() {
     processingOrderId,
     refreshOrders,
     handleOrderAction,
-  } = useOrders({ orders, setOrders, setProducts, showToast });
+  } = useOrders({ 
+    orders, 
+    setOrders, 
+    setProducts, 
+    showToast,
+    activeTab // 👈 Le pasamos la pestaña activa
+  });
 
   const {
     editingFieldId,
@@ -88,6 +96,9 @@ export default function DashboardPage() {
     handleApplyTemplate,
   } = useStoreSettings({ store, setStore, showToast });
 
+  // Estado para el QR
+  const [isQRModalOpen, setIsQRModalOpen] = useState(false);
+
   if (loading) return <LoadingState />;
   if (!store) return <StoreErrorState />;
 
@@ -101,9 +112,21 @@ export default function DashboardPage() {
     new Set(products.map((p) => p.category).filter(Boolean))
   ) as string[];
 
+  const storeUrl = `${window.location.origin}/t/${store.slug}`;
+
+  // 👇 Contador de pedidos pendientes para el Badge
+  const pendingOrdersCount = orders.filter((o) => o.status === "PENDING").length;
+
   return (
     <div className="min-h-screen bg-[#0f1115] text-slate-200 font-sans flex flex-col md:flex-row relative">
       <Toast toast={toast} />
+
+      <StoreQRModal
+        isOpen={isQRModalOpen}
+        onClose={() => setIsQRModalOpen(false)}
+        storeUrl={storeUrl}
+        storeName={store.name}
+      />
 
       {previewTemplate && (
         <TemplatePreviewModal
@@ -136,12 +159,14 @@ export default function DashboardPage() {
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onLogout={handleLogout}
+        pendingOrdersCount={pendingOrdersCount} // 👈 Prop agregada
       />
 
       <MobileNav
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onLogout={handleLogout}
+        pendingOrdersCount={pendingOrdersCount} // 👈 Prop agregada
       />
 
       <main className="flex-1 p-6 md:p-10 overflow-y-auto pb-24 md:pb-10">
@@ -149,6 +174,7 @@ export default function DashboardPage() {
           storeName={store.name}
           storeSlug={store.slug}
           onCopyLink={handleCopyStoreLink}
+          onOpenQR={() => setIsQRModalOpen(true)}
         />
 
         {activeTab === "resumen" && (
@@ -162,7 +188,7 @@ export default function DashboardPage() {
         {activeTab === "productos" && (
           <ProductsSection
             products={products}
-            customFields={customFields}  
+            customFields={customFields}
             onAdd={() => {
               resetForm();
               setIsAdding(true);
@@ -199,7 +225,7 @@ export default function DashboardPage() {
             orders={orders}
             loadingOrders={loadingOrders}
             processingOrderId={processingOrderId}
-            onRefresh={refreshOrders}
+            onRefresh={() => refreshOrders(false)}
             onAction={handleOrderAction}
           />
         )}

@@ -6,9 +6,15 @@ interface DashboardHeaderProps {
   storeName: string;
   storeSlug: string;
   onCopyLink: () => void;
+  onOpenQR: () => void; // 👈 Nueva prop
 }
 
-export function DashboardHeader({ storeName, storeSlug, onCopyLink }: DashboardHeaderProps) {
+export function DashboardHeader({
+  storeName,
+  storeSlug,
+  onCopyLink,
+  onOpenQR,
+}: DashboardHeaderProps) {
   return (
     <header className="flex flex-col md:flex-row md:items-center justify-between mb-10 gap-4">
       <div>
@@ -20,20 +26,30 @@ export function DashboardHeader({ storeName, storeSlug, onCopyLink }: DashboardH
         </p>
       </div>
 
-      <Link
-        href={`/t/${storeSlug}`}
-        target="_blank"
-        className="bg-white text-black px-4 py-2.5 md:px-6 md:py-3 rounded-lg font-bold hover:bg-slate-200 transition inline-flex items-center gap-2 text-sm shadow-lg w-fit"
-      >
-        Ver mi tienda ↗
-      </Link>
+      <div className="flex flex-wrap items-center gap-3">
+        <Link
+          href={`/t/${storeSlug}`}
+          target="_blank"
+          className="bg-white text-black px-4 py-2.5 md:px-6 md:py-3 rounded-lg font-bold hover:bg-slate-200 transition inline-flex items-center gap-2 text-sm shadow-lg w-fit"
+        >
+          Ver mi tienda ↗
+        </Link>
 
-      <button
-        onClick={onCopyLink}
-        className="bg-[#15181e] border border-slate-700 text-slate-200 px-4 py-2.5 md:px-5 md:py-3 rounded-lg font-bold hover:bg-slate-800 transition text-sm w-fit"
-      >
-        Copiar enlace
-      </button>
+        <button
+          onClick={onCopyLink}
+          className="bg-[#15181e] border border-slate-700 text-slate-200 px-4 py-2.5 md:px-5 md:py-3 rounded-lg font-bold hover:bg-slate-800 transition text-sm w-fit"
+        >
+          Copiar enlace
+        </button>
+
+        {/* 👇 Botón para el QR */}
+        <button
+          onClick={onOpenQR}
+          className="bg-[#15181e] border border-slate-700 text-slate-200 px-4 py-2.5 md:px-5 md:py-3 rounded-lg font-bold hover:bg-slate-800 transition text-sm w-fit flex items-center gap-2"
+        >
+          <span className="text-lg">📱</span> Generar QR
+        </button>
+      </div>
     </header>
   );
 }

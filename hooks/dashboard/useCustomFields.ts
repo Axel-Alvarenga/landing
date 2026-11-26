@@ -1,7 +1,9 @@
+
 "use client";
 
 import { useState } from "react";
 import { supabase } from "@/lib/supabase";
+import { useDialog } from "@/lib/dialog-context";
 import type { ToastType } from "./useToast";
 
 type ShowToast = (message: string, type?: ToastType) => void;
@@ -27,18 +29,42 @@ export function useCustomFields({
   setCustomFields,
   showToast,
 }: UseCustomFieldsArgs) {
+  const { showConfirm, showAlert } = useDialog();
+
   const [editingFieldId, setEditingFieldId] = useState<string | null>(null);
   const [fieldForm, setFieldForm] = useState(EMPTY_FIELD_FORM);
   const [savingField, setSavingField] = useState(false);
+
+  // ==========================================
+  // REINICIAR FORMULARIO
+  // ==========================================
 
   const resetFieldForm = () => {
     setEditingFieldId(null);
     setFieldForm(EMPTY_FIELD_FORM);
   };
 
+  // ==========================================
+  // CREAR / ACTUALIZAR CAMPO
+  // ==========================================
+
   const handleSaveCustomField = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!store || !fieldForm.name.trim()) return;
+
+    if (savingField) return;
+
+    if (!store) {
+      showAlert("Error", "No se pudo identificar tu tienda.");
+      return;
+    }
+
+    if (!fieldForm.name.trim()) {
+      showAlert(
+        "Nombre requerido",
+        "Ingresá un nombre para el campo personalizado."
+      );
+      return;
+    }
 
     const options =
       fieldForm.type === "SELECT"
@@ -49,20 +75,32 @@ export function useCustomFields({
         : [];
 
     if (fieldForm.type === "SELECT" && options.length === 0) {
-      showToast("Agregá al menos una opción separada por comas", "error");
+      showAlert(
+        "Faltan opciones",
+        "Agregá al menos una opción separada por comas."
+      );
       return;
     }
 
     setSavingField(true);
+
     try {
       const {
         data: { session },
       } = await supabase.auth.getSession();
-      if (!session) throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+
+      if (!session) {
+        throw new Error(
+          "Tu sesión expiró. Volvé a iniciar sesión."
+        );
+      }
 
       const isEditing = Boolean(editingFieldId);
+
       const res = await fetch(
-        isEditing ? `/api/custom-fields/${editingFieldId}` : "/api/custom-fields",
+        isEditing
+          ? `/api/custom-fields/${editingFieldId}`
+          : "/api/custom-fields",
         {
           method: isEditing ? "PUT" : "POST",
           headers: {
@@ -81,32 +119,58 @@ export function useCustomFields({
       );
 
       const result = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(result?.error || "No se pudo guardar el campo");
+
+      if (!res.ok) {
+        throw new Error(
+          result?.error || "No se pudo guardar el campo."
+        );
+      }
 
       if (isEditing) {
         setCustomFields((previous) =>
-          previous.map((field) => (field.id === result.id ? result : field))
+          previous.map((field) =>
+            field.id === result.id ? result : field
+          )
         );
       } else {
         setCustomFields((previous) =>
-          [...previous, result].sort((a, b) => a.sortOrder - b.sortOrder)
+          [...previous, result].sort(
+            (a, b) => a.sortOrder - b.sortOrder
+          )
         );
       }
 
       resetFieldForm();
-      showToast(isEditing ? "Campo actualizado" : "Campo creado");
-    } catch (error) {
+
       showToast(
-        error instanceof Error ? error.message : "Error al guardar el campo",
-        "error"
+        isEditing
+          ? "Campo actualizado correctamente."
+          : "Campo creado correctamente.",
+        "success"
       );
+
+    } catch (error) {
+      console.error("Error al guardar campo:", error);
+
+      showAlert(
+        "Error al guardar campo",
+        error instanceof Error
+          ? error.message
+          : "Ocurrió un error inesperado."
+      );
+
     } finally {
       setSavingField(false);
     }
   };
 
+  // ==========================================
+  // EDITAR CAMPO
+  // ==========================================
+
   const handleEditCustomField = (field: any) => {
     setEditingFieldId(field.id);
+
     setFieldForm({
       name: field.name,
       type: field.type,
@@ -114,41 +178,89 @@ export function useCustomFields({
       required: Boolean(field.required),
       showInStore: Boolean(field.showInStore),
     });
-    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    window.scrollTo({
+      top: 0,
+      behavior: "smooth",
+    });
   };
 
-  const handleDeleteCustomField = async (id: string, onDeleted?: (id: string) => void) => {
-    if (
-      !confirm(
-        "¿Eliminar este campo? También se eliminarán sus valores guardados en los productos."
-      )
-    )
-      return;
+  // ==========================================
+  // ELIMINAR CAMPO
+  // ==========================================
 
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) throw new Error("Tu sesión expiró. Volvé a iniciar sesión.");
+  const handleDeleteCustomField = (
+    id: string,
+    onDeleted?: (id: string) => void
+  ) => {
+    showConfirm({
+      title: "¿Eliminar campo?",
+      message:
+        "Si el campo tiene valores asignados en productos, el sistema no permitirá eliminarlo para evitar la pérdida de datos.",
 
-      const res = await fetch(`/api/custom-fields/${id}`, {
-        method: "DELETE",
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      });
+      confirmText: "Sí, eliminar",
+      cancelText: "Cancelar",
 
-      const result = await res.json().catch(() => null);
-      if (!res.ok) throw new Error(result?.error || "No se pudo eliminar el campo");
+      onConfirm: async () => {
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession();
 
-      setCustomFields((previous) => previous.filter((field) => field.id !== id));
-      onDeleted?.(id);
-      if (editingFieldId === id) resetFieldForm();
-      showToast("Campo eliminado");
-    } catch (error) {
-      showToast(
-        error instanceof Error ? error.message : "Error al eliminar el campo",
-        "error"
-      );
-    }
+          if (!session) {
+            throw new Error(
+              "Tu sesión expiró. Volvé a iniciar sesión."
+            );
+          }
+
+          const res = await fetch(
+            `/api/custom-fields/${id}`,
+            {
+              method: "DELETE",
+              headers: {
+                Authorization: `Bearer ${session.access_token}`,
+              },
+            }
+          );
+
+          const result = await res.json().catch(() => null);
+
+          if (!res.ok) {
+            throw new Error(
+              result?.error || "No se pudo eliminar el campo."
+            );
+          }
+
+          // Actualizar lista
+          setCustomFields((previous) =>
+            previous.filter((field) => field.id !== id)
+          );
+
+          // Ejecutar callback opcional
+          onDeleted?.(id);
+
+          // Si se estaba editando este campo, limpiar formulario
+          if (editingFieldId === id) {
+            resetFieldForm();
+          }
+
+          showToast(
+            "Campo eliminado correctamente.",
+            "success"
+          );
+
+        } catch (error) {
+          console.error("Error al eliminar campo:", error);
+
+          showAlert(
+            "No se pudo eliminar el campo",
+            error instanceof Error
+              ? error.message
+              : "Ocurrió un error inesperado."
+          );
+        }
+      },
+    });
   };
 
   return {

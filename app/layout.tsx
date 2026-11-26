@@ -1,7 +1,9 @@
+
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import GoogleCaptchaWrapper from "./google-captcha-wrapper";
+import { DialogProvider } from "@/lib/dialog-context";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -15,9 +17,13 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="es">
-      <body className={`${inter.className} bg-[#0f1115] text-slate-200 antialiased`}>
+      <body
+        className={`${inter.className} bg-[#0f1115] text-slate-200 antialiased`}
+      >
         <GoogleCaptchaWrapper>
-          {children}
+          <DialogProvider>
+            {children}
+          </DialogProvider>
         </GoogleCaptchaWrapper>
       </body>
     </html>

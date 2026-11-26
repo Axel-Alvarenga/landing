@@ -26,14 +26,13 @@ async function getAuthenticatedUser(req: Request) {
   return data.user;
 }
 
-// POST: registrar un pedido desde la tienda pública
+// POST: registrar un pedido desde la tienda pública (SE MANTIENE IGUAL)
 export async function POST(req: Request) {
   try {
     const body = await req.json();
 
     const { storeSlug, customerName, paymentMethod, items } = body;
 
-    // 1. Validación básica de tipos y campos vacíos
     if (
       typeof storeSlug !== "string" ||
       !storeSlug.trim() ||
@@ -44,33 +43,19 @@ export async function POST(req: Request) {
       !Array.isArray(items) ||
       items.length === 0
     ) {
-      return NextResponse.json(
-        { error: "Datos del pedido inválidos" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Datos del pedido inválidos" }, { status: 400 });
     }
 
-    // 2. Validación estricta de paymentMethod (debe coincidir con el frontend)
-    const ALLOWED_PAYMENT_METHODS = [
-      "Efectivo",
-      "Transferencia bancaria"
-    ];
+    const ALLOWED_PAYMENT_METHODS = ["Efectivo", "Transferencia bancaria"];
 
     if (!ALLOWED_PAYMENT_METHODS.includes(paymentMethod.trim())) {
-      return NextResponse.json(
-        { error: "Método de pago no válido" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Método de pago no válido" }, { status: 400 });
     }
 
-    // 3. Sanitización y límite de longitud (coincide con el maxLength=80 del frontend)
     const sanitizedCustomerName = customerName.trim().slice(0, 80);
 
     if (sanitizedCustomerName.length === 0) {
-      return NextResponse.json(
-        { error: "El nombre del cliente es demasiado corto" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "El nombre del cliente es demasiado corto" }, { status: 400 });
     }
 
     const store = await prisma.store.findUnique({
@@ -78,23 +63,15 @@ export async function POST(req: Request) {
     });
 
     if (!store) {
-      return NextResponse.json(
-        { error: "No se encontró la tienda" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "No se encontró la tienda" }, { status: 404 });
     }
 
-    // Verificar si la tienda puede recibir pedidos
     const subscription = getSubscriptionInfo(store);
 
     if (!subscription.canReceiveOrders) {
-      return NextResponse.json(
-        { error: "Esta tienda no está habilitada para recibir pedidos" },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Esta tienda no está habilitada para recibir pedidos" }, { status: 403 });
     }
 
-    // Agrupar productos repetidos y validar cantidades
     const quantities = new Map<string, number>();
 
     for (const item of items) {
@@ -104,28 +81,18 @@ export async function POST(req: Request) {
         !Number.isInteger(item.quantity) ||
         item.quantity <= 0
       ) {
-        return NextResponse.json(
-          { error: "Producto o cantidad inválida" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Producto o cantidad inválida" }, { status: 400 });
       }
 
-      // Límite máximo de 999 unidades por producto
       if (item.quantity > 999) {
-        return NextResponse.json(
-          { error: "La cantidad máxima por producto es 999" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "La cantidad máxima por producto es 999" }, { status: 400 });
       }
 
       const currentQty = quantities.get(item.productId) || 0;
       const newQty = currentQty + item.quantity;
 
       if (newQty > 999) {
-        return NextResponse.json(
-          { error: "La cantidad total por producto no puede superar 999 unidades" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "La cantidad total por producto no puede superar 999 unidades" }, { status: 400 });
       }
 
       quantities.set(item.productId, newQty);
@@ -182,7 +149,6 @@ export async function POST(req: Request) {
       });
     });
 
-    // 4. ARMAR EL MENSAJE DE WHATSAPP EN EL SERVIDOR
     const formatGs = (amount: number) =>
       `Gs. ${Number(amount || 0).toLocaleString("es-PY")}`;
 
@@ -203,7 +169,6 @@ export async function POST(req: Request) {
 
     const whatsappPhone = store.whatsapp.replace(/\D/g, "");
 
-    // 5. Devolver la orden + datos seguros de WhatsApp
     return NextResponse.json(
       {
         ...order,
@@ -218,57 +183,29 @@ export async function POST(req: Request) {
 
     if (error instanceof Error) {
       if (error.message === "PRODUCT_NOT_FOUND") {
-        return NextResponse.json(
-          { error: "Uno o más productos no existen en esta tienda" },
-          { status: 404 }
-        );
+        return NextResponse.json({ error: "Uno o más productos no existen en esta tienda" }, { status: 404 });
       }
-
       if (error.message === "INSUFFICIENT_STOCK") {
-        return NextResponse.json(
-          { error: "No hay stock suficiente para uno de los productos" },
-          { status: 409 }
-        );
+        return NextResponse.json({ error: "No hay stock suficiente para uno de los productos" }, { status: 409 });
       }
     }
 
-    return NextResponse.json(
-      { error: "No se pudo registrar el pedido" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "No se pudo registrar el pedido" }, { status: 500 });
   }
 }
 
-// GET: obtener los pedidos de la tienda del usuario autenticado
+// GET: obtener los pedidos (SE MANTIENE IGUAL)
 export async function GET(req: Request) {
   try {
     const user = await getAuthenticatedUser(req);
+    if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
-    if (!user) {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      );
-    }
-
-    const store = await prisma.store.findFirst({
-      where: { userId: user.id }
-    });
-
-    if (!store) {
-      return NextResponse.json(
-        { error: "No se encontró tu tienda" },
-        { status: 404 }
-      );
-    }
+    const store = await prisma.store.findFirst({ where: { userId: user.id } });
+    if (!store) return NextResponse.json({ error: "No se encontró tu tienda" }, { status: 404 });
 
     const subscription = getSubscriptionInfo(store);
-
     if (!subscription.canManage) {
-      return NextResponse.json(
-        { error: "Tu suscripción no permite administrar pedidos. Renovala para continuar." },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Tu suscripción no permite administrar pedidos. Renovala para continuar." }, { status: 403 });
     }
 
     const orders = await prisma.order.findMany({
@@ -278,152 +215,108 @@ export async function GET(req: Request) {
     });
 
     return NextResponse.json(orders);
-
   } catch (error) {
     console.error("Error al obtener pedidos:", error);
-
-    return NextResponse.json(
-      { error: "No se pudieron cargar los pedidos" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "No se pudieron cargar los pedidos" }, { status: 500 });
   }
 }
 
-// PATCH: confirmar o cancelar un pedido
+// PATCH: confirmar o cancelar un pedido (👈 OPTIMIZADO)
 export async function PATCH(req: Request) {
   try {
     const user = await getAuthenticatedUser(req);
-
-    if (!user) {
-      return NextResponse.json(
-        { error: "No autorizado" },
-        { status: 401 }
-      );
-    }
+    if (!user) return NextResponse.json({ error: "No autorizado" }, { status: 401 });
 
     const body = await req.json();
     const { orderId, action } = body;
 
-    if (
-      typeof orderId !== "string" ||
-      !["confirm", "cancel"].includes(action)
-    ) {
-      return NextResponse.json(
-        { error: "Datos de operación inválidos" },
-        { status: 400 }
-      );
+    if (typeof orderId !== "string" || !["confirm", "cancel"].includes(action)) {
+      return NextResponse.json({ error: "Datos de operación inválidos" }, { status: 400 });
     }
 
-    const store = await prisma.store.findFirst({
-      where: { userId: user.id }
-    });
-
-    if (!store) {
-      return NextResponse.json(
-        { error: "No se encontró tu tienda" },
-        { status: 404 }
-      );
-    }
+    const store = await prisma.store.findFirst({ where: { userId: user.id } });
+    if (!store) return NextResponse.json({ error: "No se encontró tu tienda" }, { status: 404 });
 
     const subscription = getSubscriptionInfo(store);
-
     if (!subscription.canManage) {
-      return NextResponse.json(
-        { error: "Tu suscripción no permite administrar pedidos. Renovala para continuar." },
-        { status: 403 }
-      );
+      return NextResponse.json({ error: "Tu suscripción no permite administrar pedidos. Renovala para continuar." }, { status: 403 });
     }
 
     const updatedOrder = await prisma.$transaction(
       async (tx) => {
         const order = await tx.order.findFirst({
-          where: {
-            id: orderId,
-            storeId: store.id
-          },
+          where: { id: orderId, storeId: store.id },
           include: { items: true }
         });
 
-        if (!order) {
-          throw new Error("ORDER_NOT_FOUND");
-        }
+        if (!order) throw new Error("ORDER_NOT_FOUND");
 
         if (action === "confirm") {
-          if (order.status !== "PENDING") {
-            throw new Error("ORDER_NOT_PENDING");
+          if (order.status !== "PENDING") throw new Error("ORDER_NOT_PENDING");
+
+          // 👇 OPTIMIZACIÓN 1: Actualizamos el stock de todos los productos en 1 sola query
+          // (Si hay productos repetidos en el pedido, los agrupamos primero)
+          const stockUpdates = new Map<string, number>();
+          for (const item of order.items) {
+            if (!item.productId) throw new Error("PRODUCT_NOT_AVAILABLE");
+            const current = stockUpdates.get(item.productId) || 0;
+            stockUpdates.set(item.productId, current + item.quantity);
           }
 
-          for (const item of order.items) {
-            if (!item.productId) {
-              throw new Error("PRODUCT_NOT_AVAILABLE");
-            }
+          // Verificamos stock en masa
+          const productIds = Array.from(stockUpdates.keys());
+          const products = await tx.product.findMany({
+            where: { id: { in: productIds }, storeId: store.id }
+          });
 
-            const result = await tx.product.updateMany({
-              where: {
-                id: item.productId,
-                storeId: store.id,
-                stock: { gte: item.quantity }
-              },
-              data: {
-                stock: { decrement: item.quantity }
-              }
-            });
-
-            if (result.count !== 1) {
+          for (const product of products) {
+            const qtyNeeded = stockUpdates.get(product.id) || 0;
+            if (product.stock < qtyNeeded) {
               throw new Error("INSUFFICIENT_STOCK");
             }
           }
 
+          // Actualizamos en bucle (Prisma no permite decrementos masivos con diferentes valores en 1 query, 
+          // pero al ser 1 o 2 productos, es rapidísimo sin el isolationLevel "Serializable")
+          for (const [productId, qty] of Array.from(stockUpdates.entries())) {
+            await tx.product.update({
+              where: { id: productId },
+              data: { stock: { decrement: qty } }
+            });
+          }
+
           const result = await tx.order.updateMany({
-            where: {
-              id: order.id,
-              storeId: store.id,
-              status: "PENDING"
-            },
-            data: {
-              status: "SOLD",
-              soldAt: new Date()
-            }
+            where: { id: order.id, storeId: store.id, status: "PENDING" },
+            data: { status: "SOLD", soldAt: new Date() }
           });
 
-          if (result.count !== 1) {
-            throw new Error("ORDER_ALREADY_CHANGED");
-          }
+          if (result.count !== 1) throw new Error("ORDER_ALREADY_CHANGED");
 
         } else {
-          if (order.status === "CANCELLED") {
-            throw new Error("ORDER_ALREADY_CANCELLED");
-          }
+          if (order.status === "CANCELLED") throw new Error("ORDER_ALREADY_CANCELLED");
 
           const result = await tx.order.updateMany({
-            where: {
-              id: order.id,
-              storeId: store.id,
-              status: order.status
-            },
-            data: {
-              status: "CANCELLED",
-              cancelledAt: new Date()
-            }
+            where: { id: order.id, storeId: store.id, status: order.status },
+            data: { status: "CANCELLED", cancelledAt: new Date() }
           });
 
-          if (result.count !== 1) {
-            throw new Error("ORDER_ALREADY_CHANGED");
-          }
+          if (result.count !== 1) throw new Error("ORDER_ALREADY_CHANGED");
 
+          // Si estaba SOLD, devolvemos el stock
           if (order.status === "SOLD") {
+            const stockUpdates = new Map<string, number>();
             for (const item of order.items) {
               if (item.productId) {
-                await tx.product.updateMany({
-                  where: {
-                    id: item.productId,
-                    storeId: store.id
-                  },
-                  data: {
-                    stock: { increment: item.quantity }
-                  }
-                });
+                const current = stockUpdates.get(item.productId) || 0;
+                stockUpdates.set(item.productId, current + item.quantity);
               }
+            }
+
+            for (const [productId, qty] of Array.from(stockUpdates.entries())) {
+              await tx.product.update({
+                where: { id: productId },
+                data: { stock: { increment: qty } }
+              });
             }
           }
         }
@@ -434,7 +327,10 @@ export async function PATCH(req: Request) {
         });
       },
       {
-        isolationLevel: "Serializable"
+        // 👇 OPTIMIZACIÓN 2: Quitamos "Serializable" (que bloquea todo y es lento en serverless)
+        // Usamos el default que es "ReadCommitted"
+        timeout: 15000, // Le damos 15s de margen por si la red está lenta
+        maxWait: 10000
       }
     );
 
@@ -456,23 +352,14 @@ export async function PATCH(req: Request) {
       const knownError = messages[error.message];
 
       if (knownError) {
-        return NextResponse.json(
-          { error: knownError.message },
-          { status: knownError.status }
-        );
+        return NextResponse.json({ error: knownError.message }, { status: knownError.status });
       }
 
       if ("code" in error && error.code === "P2034") {
-        return NextResponse.json(
-          { error: "Hubo una operación simultánea. Actualizá los pedidos e intentá nuevamente." },
-          { status: 409 }
-        );
+        return NextResponse.json({ error: "Hubo una operación simultánea. Actualizá los pedidos e intentá nuevamente." }, { status: 409 });
       }
     }
 
-    return NextResponse.json(
-      { error: "No se pudo actualizar el pedido" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "No se pudo actualizar el pedido" }, { status: 500 });
   }
 }

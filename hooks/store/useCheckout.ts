@@ -1,7 +1,9 @@
+
 "use client";
 
 import { useState } from "react";
 import type { CartItem, Store } from "@/lib/store/types";
+import { useDialog } from "@/lib/dialog-context";
 
 interface UseCheckoutArgs {
   store: Store | null;
@@ -10,7 +12,14 @@ interface UseCheckoutArgs {
   onSuccess: () => void;
 }
 
-export function useCheckout({ store, cart, total, onSuccess }: UseCheckoutArgs) {
+export function useCheckout({
+  store,
+  cart,
+  total,
+  onSuccess,
+}: UseCheckoutArgs) {
+  const { showAlert } = useDialog();
+
   const [customerName, setCustomerName] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Efectivo");
   const [isCheckingOut, setIsCheckingOut] = useState(false);
@@ -18,8 +27,12 @@ export function useCheckout({ store, cart, total, onSuccess }: UseCheckoutArgs) 
   const handleCheckout = async () => {
     if (!store || cart.length === 0 || isCheckingOut) return;
 
+    // Validar nombre
     if (!customerName.trim()) {
-      alert("Por favor, ingresa tu nombre para continuar.");
+      showAlert(
+        "Falta el nombre",
+        "Por favor, ingresa tu nombre para continuar."
+      );
       return;
     }
 
@@ -28,7 +41,9 @@ export function useCheckout({ store, cart, total, onSuccess }: UseCheckoutArgs) 
 
       const response = await fetch("/api/orders", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
           storeSlug: store.slug,
           customerName: customerName.trim(),
@@ -43,27 +58,38 @@ export function useCheckout({ store, cart, total, onSuccess }: UseCheckoutArgs) 
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.error || "No se pudo registrar el pedido.");
+        throw new Error(
+          data.error || "No se pudo registrar el pedido."
+        );
       }
 
-      // 👇 EL BACKEND NOS DA TODO LISTO Y SEGURO
       const { whatsappPhone, whatsappMessage } = data;
 
+      // Validar número de WhatsApp recibido del backend
       if (!whatsappPhone) {
-        throw new Error("El número de WhatsApp de esta tienda no es válido.");
+        throw new Error(
+          "El número de WhatsApp de esta tienda no es válido."
+        );
       }
 
-      const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(whatsappMessage)}`;
+      const whatsappUrl = `https://wa.me/${whatsappPhone}?text=${encodeURIComponent(
+        whatsappMessage
+      )}`;
 
-      onSuccess(); // Limpia el carrito y localStorage
-      window.location.href = whatsappUrl; // Redirige a WhatsApp
+      // Limpiar carrito
+      onSuccess();
+
+      // Redirigir a WhatsApp
+      window.location.href = whatsappUrl;
 
     } catch (error) {
       console.error("Error al finalizar pedido:", error);
-      alert(
+
+      showAlert(
+        "Error al registrar pedido",
         error instanceof Error
           ? error.message
-          : "Ocurrió un error al registrar el pedido."
+          : "Ocurrió un error inesperado."
       );
     } finally {
       setIsCheckingOut(false);
