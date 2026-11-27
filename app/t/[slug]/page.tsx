@@ -1,11 +1,13 @@
 "use client";
 
+import { useState } from "react";
 import { useStore } from "@/hooks/store/useStore";
 import { useCart } from "@/hooks/store/useCart";
 import { useProductFilters } from "@/hooks/store/useProductFilters";
 import { useCheckout } from "@/hooks/store/useCheckout";
 
 import { getTheme, isLight } from "@/lib/store/templates";
+import type { Product } from "@/lib/store/types";
 
 import { StoreLoading } from "@/components/store/StoreLoading";
 import { StoreNotFound } from "@/components/store/StoreNotFound";
@@ -15,6 +17,7 @@ import { StoreFilters } from "@/components/store/StoreFilters";
 import { ProductGrid } from "@/components/store/ProductGrid";
 import { StoreFooter } from "@/components/store/StoreFooter";
 import { CartDrawer } from "@/components/store/CartDrawer";
+import { ProductDetailModal } from "@/components/store/ProductDetailModal"; // 👈 NUEVO IMPORT
 
 export default function StorePage({
   params,
@@ -22,6 +25,7 @@ export default function StorePage({
   params: Promise<{ slug: string }>;
 }) {
   const { store, products, loading, slug } = useStore(params);
+  
   const {
     cart,
     isCartOpen,
@@ -34,7 +38,6 @@ export default function StorePage({
     totalItems,
   } = useCart(slug);
 
-  // ⚠️ useProductFilters necesita store; lo pasamos null-safe
   const filters = useProductFilters(products, store);
 
   const {
@@ -50,6 +53,9 @@ export default function StorePage({
     total,
     onSuccess: clearCart,
   });
+
+  // 👇 Estado para el modal del producto
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
 
   if (loading) return <StoreLoading />;
   if (!store) return <StoreNotFound />;
@@ -92,18 +98,6 @@ export default function StorePage({
               [fieldId]: value,
             }))
           }
-          priceMin={filters.priceMin}
-          priceMax={filters.priceMax}
-          onPriceMinChange={filters.setPriceMin}
-          onPriceMaxChange={filters.setPriceMax}
-          numberFields={filters.numberFields}
-          numberFilters={filters.numberFilters}
-          onNumberFilterChange={(fieldId, range) =>
-            filters.setNumberFilters((prev) => ({
-              ...prev,
-              [fieldId]: range,
-            }))
-          }
           sortBy={filters.sortBy}
           onSortChange={filters.setSortBy}
           sortOptions={filters.sortOptions}
@@ -117,7 +111,7 @@ export default function StorePage({
           themeBg={theme.bg}
           themeCard={theme.card}
           themeAccent={theme.accent}
-          onAddToCart={addToCart}
+          onProductClick={(product) => setSelectedProduct(product)} // 👈 Abre el modal
           onResetFilters={filters.resetFilters}
         />
       </main>
@@ -136,7 +130,6 @@ export default function StorePage({
         isOpen={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         cart={cart}
-        storeCustomFields={store.customFields}
         total={total}
         onUpdateQuantity={updateQuantity}
         onRemove={removeFromCart}
@@ -146,6 +139,18 @@ export default function StorePage({
         onPaymentMethodChange={setPaymentMethod}
         isCheckingOut={isCheckingOut}
         onCheckout={handleCheckout}
+      />
+
+      {/* 👇 MODAL DEL PRODUCTO */}
+      <ProductDetailModal
+        product={selectedProduct}
+        storeCustomFields={store.customFields}
+        isLightTheme={isLightTheme}
+        themeBg={theme.bg}
+        themeCard={theme.card}
+        themeAccent={theme.accent}
+        onClose={() => setSelectedProduct(null)}
+        onAddToCart={addToCart}
       />
     </div>
   );

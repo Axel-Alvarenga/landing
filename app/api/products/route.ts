@@ -14,8 +14,11 @@ function validateCustomFieldValue(
       return true;
     case "NUMBER":
       return value.trim() !== "" && Number.isFinite(Number(value));
-    case "SELECT":
-      return options.includes(value);
+    case "SELECT": {
+      // Permite múltiples opciones separadas por coma (ej: "Rojo,Azul")
+      const values = value.split(",").map((v) => v.trim()).filter(Boolean);
+      return values.length > 0 && values.every((v) => options.includes(v));
+    }
     case "DATE":
       return value.trim() !== "" && !Number.isNaN(Date.parse(value));
     case "CHECKBOX":
@@ -74,7 +77,7 @@ export async function POST(req: Request) {
         userId: data.user.id,
       },
       include: {
-        customFields: true, // 👈 una sola query en vez de dos
+        customFields: true,
       },
     });
 

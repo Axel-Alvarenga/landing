@@ -57,6 +57,10 @@ export default function DashboardPage() {
     handleEditClick,
     handleSaveProduct,
     handleDeleteProduct,
+    handleQuickStockUpdate,
+    isUpdatingStock,
+    handleImportCSV,
+    isImporting,
   } = useProducts({ store, products, setProducts, customFields, showToast });
 
   const {
@@ -69,7 +73,7 @@ export default function DashboardPage() {
     setOrders, 
     setProducts, 
     showToast,
-    activeTab // 👈 Le pasamos la pestaña activa
+    activeTab 
   });
 
   const {
@@ -96,7 +100,6 @@ export default function DashboardPage() {
     handleApplyTemplate,
   } = useStoreSettings({ store, setStore, showToast });
 
-  // Estado para el QR
   const [isQRModalOpen, setIsQRModalOpen] = useState(false);
 
   if (loading) return <LoadingState />;
@@ -113,8 +116,6 @@ export default function DashboardPage() {
   ) as string[];
 
   const storeUrl = `${window.location.origin}/t/${store.slug}`;
-
-  // 👇 Contador de pedidos pendientes para el Badge
   const pendingOrdersCount = orders.filter((o) => o.status === "PENDING").length;
 
   return (
@@ -159,14 +160,14 @@ export default function DashboardPage() {
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onLogout={handleLogout}
-        pendingOrdersCount={pendingOrdersCount} // 👈 Prop agregada
+        pendingOrdersCount={pendingOrdersCount}
       />
 
       <MobileNav
         activeTab={activeTab}
         onChangeTab={setActiveTab}
         onLogout={handleLogout}
-        pendingOrdersCount={pendingOrdersCount} // 👈 Prop agregada
+        pendingOrdersCount={pendingOrdersCount}
       />
 
       <main className="flex-1 p-6 md:p-10 overflow-y-auto pb-24 md:pb-10">
@@ -195,6 +196,10 @@ export default function DashboardPage() {
             }}
             onEdit={handleEditClick}
             onDelete={handleDeleteProduct}
+            onUpdateStock={handleQuickStockUpdate}
+            isUpdatingStock={isUpdatingStock}
+            onImportCSV={handleImportCSV}
+            isImporting={isImporting}
           />
         )}
 

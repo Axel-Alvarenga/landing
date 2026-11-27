@@ -14,6 +14,12 @@ export type CustomFieldValue = {
   value: string;
 };
 
+export type SelectedOption = {
+  fieldId: string;
+  fieldName: string;
+  value: string;
+};
+
 export type Product = {
   id: string;
   name: string;
@@ -35,7 +41,11 @@ export type Store = {
   customFields: CustomField[];
 };
 
-export type CartItem = Product & { quantity: number };
+export type CartItem = Product & {
+  quantity: number;
+  cartItemId: string;
+  selectedOptions: SelectedOption[];
+};
 
 export type TemplateTheme = {
   bg: string;

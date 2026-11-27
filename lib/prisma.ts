@@ -9,8 +9,8 @@ export const prisma =
   new PrismaClient({
     log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
     transactionOptions: {
-      maxWait: 10000, // 10s esperando conexión del pool
-      timeout: 15000, // 15s máximo de transacción interactiva
+      maxWait: 30000, // 👈 30s esperando conexión del pool
+      timeout: 30000, // 👈 30s máximo de transacción interactiva
     },
   });
 

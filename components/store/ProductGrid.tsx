@@ -11,7 +11,7 @@ interface ProductGridProps {
   themeBg: string;
   themeCard: string;
   themeAccent: string;
-  onAddToCart: (product: Product) => void;
+  onProductClick: (product: Product) => void; // 👈 Nueva prop
   onResetFilters: () => void;
 }
 
@@ -23,7 +23,7 @@ export function ProductGrid({
   themeBg,
   themeCard,
   themeAccent,
-  onAddToCart,
+  onProductClick,
   onResetFilters,
 }: ProductGridProps) {
   if (products.length === 0) {
@@ -37,13 +37,8 @@ export function ProductGrid({
   if (filteredProducts.length === 0) {
     return (
       <div className="text-center py-20 opacity-60">
-        <p className="text-xl">
-          No se encontraron productos con esa búsqueda.
-        </p>
-        <button
-          onClick={onResetFilters}
-          className="mt-4 underline font-bold"
-        >
+        <p className="text-xl">No se encontraron productos con esa búsqueda.</p>
+        <button onClick={onResetFilters} className="mt-4 underline font-bold">
           Limpiar filtros
         </button>
       </div>
@@ -61,7 +56,7 @@ export function ProductGrid({
           themeBg={themeBg}
           themeCard={themeCard}
           themeAccent={themeAccent}
-          onAddToCart={onAddToCart}
+          onClick={() => onProductClick(p)}
         />
       ))}
     </div>

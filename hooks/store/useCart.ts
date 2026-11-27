@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { CartItem, Product } from "@/lib/store/types";
+import type { CartItem, Product, SelectedOption } from "@/lib/store/types";
 
 export function useCart(slug: string) {
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -25,19 +25,23 @@ export function useCart(slug: string) {
     }
   }, [cart, slug]);
 
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, selectedOptions: SelectedOption[]) => {
     setCart((prev) => {
-      const existing = prev.find((item) => item.id === product.id);
+      // Creamos una firma única basada en las opciones elegidas
+      const optionString = selectedOptions.map((o) => `${o.fieldId}:${o.value}`).join("-");
+      const cartItemId = `${product.id}-${optionString}`;
+
+      const existing = prev.find((item) => item.cartItemId === cartItemId);
+
       if (existing) {
         if (existing.quantity >= product.stock) return prev;
         return prev.map((item) =>
-          item.id === product.id
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
+          item.cartItemId === cartItemId ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
+
       if (product.stock <= 0) return prev;
-      return [...prev, { ...product, quantity: 1 }];
+      return [...prev, { ...product, quantity: 1, cartItemId, selectedOptions }];
     });
 
     if (product.stock > 0) {
@@ -45,10 +49,10 @@ export function useCart(slug: string) {
     }
   };
 
-  const updateQuantity = (id: string, delta: number) => {
+  const updateQuantity = (cartItemId: string, delta: number) => {
     setCart((prev) =>
       prev.map((item) => {
-        if (item.id === id) {
+        if (item.cartItemId === cartItemId) {
           const newQuantity = item.quantity + delta;
           if (newQuantity <= 0) return item;
           if (newQuantity > item.stock) return item;
@@ -59,8 +63,8 @@ export function useCart(slug: string) {
     );
   };
 
-  const removeFromCart = (id: string) => {
-    setCart((prev) => prev.filter((item) => item.id !== id));
+  const removeFromCart = (cartItemId: string) => {
+    setCart((prev) => prev.filter((item) => item.cartItemId !== cartItemId));
   };
 
   const clearCart = () => {
@@ -68,25 +72,8 @@ export function useCart(slug: string) {
     if (slug) localStorage.removeItem(`cart_${slug}`);
   };
 
-  const total = cart.reduce(
-    (acc, item) => acc + item.price * item.quantity,
-    0
-  );
+  const total = cart.reduce((acc, item) => acc + item.price * item.quantity, 0);
+  const totalItems = cart.reduce((acc, item) => acc + item.quantity, 0);
 
-  const totalItems = cart.reduce(
-    (acc, item) => acc + item.quantity,
-    0
-  );
-
-  return {
-    cart,
-    isCartOpen,
-    setIsCartOpen,
-    addToCart,
-    updateQuantity,
-    removeFromCart,
-    clearCart,
-    total,
-    totalItems,
-  };
+  return { cart, isCartOpen, setIsCartOpen, addToCart, updateQuantity, removeFromCart, clearCart, total, totalItems };
 }

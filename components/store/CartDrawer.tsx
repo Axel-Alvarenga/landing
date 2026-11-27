@@ -1,6 +1,6 @@
 "use client";
 
-import type { CartItem, CustomField } from "@/lib/store/types";
+import type { CartItem } from "@/lib/store/types";
 import { formatPrice } from "@/lib/store/format";
 import { CartItemRow } from "./CartItemRow";
 
@@ -8,10 +8,9 @@ interface CartDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   cart: CartItem[];
-  storeCustomFields: CustomField[];
   total: number;
-  onUpdateQuantity: (id: string, delta: number) => void;
-  onRemove: (id: string) => void;
+  onUpdateQuantity: (cartItemId: string, delta: number) => void;
+  onRemove: (cartItemId: string) => void;
   customerName: string;
   onCustomerNameChange: (value: string) => void;
   paymentMethod: string;
@@ -24,7 +23,6 @@ export function CartDrawer({
   isOpen,
   onClose,
   cart,
-  storeCustomFields,
   total,
   onUpdateQuantity,
   onRemove,
@@ -43,10 +41,7 @@ export function CartDrawer({
     >
       <div className="p-5 border-b flex justify-between items-center bg-gray-50">
         <h2 className="text-xl font-bold">Tu Carrito</h2>
-        <button
-          onClick={onClose}
-          className="text-gray-500 hover:text-black text-2xl font-bold p-2"
-        >
+        <button onClick={onClose} className="text-gray-500 hover:text-black text-2xl font-bold p-2">
           ×
         </button>
       </div>
@@ -60,9 +55,8 @@ export function CartDrawer({
         ) : (
           cart.map((item) => (
             <CartItemRow
-              key={item.id}
+              key={item.cartItemId}
               item={item}
-              storeCustomFields={storeCustomFields}
               onUpdateQuantity={onUpdateQuantity}
               onRemove={onRemove}
             />
@@ -75,9 +69,7 @@ export function CartDrawer({
           <h3 className="font-bold text-gray-800">Datos del pedido</h3>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Nombre del cliente
-            </label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Nombre del cliente</label>
             <input
               type="text"
               placeholder="Ingresa tu nombre"
@@ -89,18 +81,14 @@ export function CartDrawer({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">
-              Método de pago
-            </label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">Método de pago</label>
             <select
               value={paymentMethod}
               onChange={(e) => onPaymentMethodChange(e.target.value)}
               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-emerald-500"
             >
               <option value="Efectivo">Efectivo</option>
-              <option value="Transferencia bancaria">
-                Transferencia bancaria
-              </option>
+              <option value="Transferencia bancaria">Transferencia bancaria</option>
             </select>
           </div>
 

@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { createClient } from "@supabase/supabase-js";
 import { getSubscriptionInfo } from "@/lib/subscription";
 
-// Verificar que el usuario esté autenticado
 async function getAuthenticatedUser(req: Request) {
   const authHeader = req.headers.get("Authorization");
   const token = authHeader?.replace("Bearer ", "");
@@ -22,7 +21,6 @@ async function getAuthenticatedUser(req: Request) {
   return data.user;
 }
 
-// Verificar que la tienda permita administrar productos
 async function getManageableProduct(id: string, userId: string) {
   const product = await prisma.product.findFirst({
     where: {
@@ -32,7 +30,6 @@ async function getManageableProduct(id: string, userId: string) {
       },
     },
     include: {
-      // 👇 traemos solo lo necesario de la tienda (no la entidad completa)
       store: {
         select: {
           trialEndsAt: true,
@@ -71,8 +68,11 @@ function validateCustomFieldValue(
       return true;
     case "NUMBER":
       return value.trim() !== "" && Number.isFinite(Number(value));
-    case "SELECT":
-      return options.includes(value);
+    case "SELECT": {
+      // Permite múltiples opciones separadas por coma (ej: "Rojo,Azul")
+      const values = value.split(",").map((v) => v.trim()).filter(Boolean);
+      return values.length > 0 && values.every((v) => options.includes(v));
+    }
     case "DATE":
       return !Number.isNaN(Date.parse(value));
     case "CHECKBOX":
@@ -245,7 +245,6 @@ export async function PUT(
     }
 
     // Actualizar producto en UNA sola operación atómica.
-    // El `deleteMany` + `create` anidados los resuelve Prisma sin timeout interactivo.
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: {
@@ -260,11 +259,10 @@ export async function PUT(
           typeof category === "string" && category.trim()
             ? category.trim()
             : "General",
-        // Solo reemplazamos si vinieron campos
         ...(customFieldValues !== undefined
           ? {
               customFieldValues: {
-                deleteMany: {}, // borra todos los valores del producto
+                deleteMany: {},
                 create: customFieldValues
                   .filter((item: any) => item.value.trim() !== "")
                   .map((item: any) => ({

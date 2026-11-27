@@ -1,5 +1,7 @@
 "use client";
 
+import { useState } from "react";
+
 interface OrdersSectionProps {
   orders: any[];
   loadingOrders: boolean;
@@ -15,6 +17,24 @@ export function OrdersSection({
   onRefresh,
   onAction,
 }: OrdersSectionProps) {
+  // 👇 Estados locales para filtros
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<"ALL" | "PENDING" | "SOLD" | "CANCELLED">("ALL");
+
+  // 👇 Lógica de filtrado
+  const filteredOrders = orders.filter((order) => {
+    // Filtro por estado
+    if (statusFilter !== "ALL" && order.status !== statusFilter) return false;
+
+    // Filtro por búsqueda (nombre o ID)
+    const searchLower = searchQuery.toLowerCase();
+    const matchesSearch =
+      order.customerName?.toLowerCase().includes(searchLower) ||
+      order.id.toLowerCase().includes(searchLower);
+
+    return matchesSearch;
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -35,32 +55,44 @@ export function OrdersSection({
         </button>
       </div>
 
+      {/* 👇 BUSCADOR */}
+      <div className="relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+          🔍
+        </span>
+        <input
+          type="text"
+          placeholder="Buscar por cliente o número de pedido..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full bg-[#15181e] border border-slate-800 rounded-xl pl-10 pr-4 py-3 text-white text-sm outline-none focus:border-emerald-500 transition"
+        />
+      </div>
+
+      {/* 👇 TARJETAS DE FILTRO (Ahora clickeables) */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Todos", value: orders.length },
-          {
-            label: "Pendientes",
-            value: orders.filter((o) => o.status === "PENDING").length,
-          },
-          {
-            label: "Vendidos",
-            value: orders.filter((o) => o.status === "SOLD").length,
-          },
-          {
-            label: "Cancelados",
-            value: orders.filter((o) => o.status === "CANCELLED").length,
-          },
+          { id: "ALL", label: "Todos", count: orders.length, color: "text-white" },
+          { id: "PENDING", label: "Pendientes", count: orders.filter((o) => o.status === "PENDING").length, color: "text-amber-400" },
+          { id: "SOLD", label: "Vendidos", count: orders.filter((o) => o.status === "SOLD").length, color: "text-emerald-400" },
+          { id: "CANCELLED", label: "Cancelados", count: orders.filter((o) => o.status === "CANCELLED").length, color: "text-red-400" },
         ].map((item) => (
-          <div
-            key={item.label}
-            className="bg-[#15181e] border border-slate-800 rounded-xl p-4"
+          <button
+            key={item.id}
+            onClick={() => setStatusFilter(item.id as any)}
+            className={`bg-[#15181e] border rounded-xl p-4 text-left transition ${
+              statusFilter === item.id
+                ? "border-emerald-500 ring-1 ring-emerald-500/20"
+                : "border-slate-800 hover:border-slate-600"
+            }`}
           >
-            <p className="text-xs text-slate-400">{item.label}</p>
-            <p className="text-2xl font-bold text-white mt-1">{item.value}</p>
-          </div>
+            <p className="text-xs text-slate-400 font-medium">{item.label}</p>
+            <p className={`text-2xl font-bold mt-1 ${item.color}`}>{item.count}</p>
+          </button>
         ))}
       </div>
 
+      {/* LISTA DE PEDIDOS */}
       {loadingOrders ? (
         <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-10 text-center text-slate-400">
           Cargando pedidos...
@@ -75,9 +107,14 @@ export function OrdersSection({
             Cuando un cliente realice un pedido, aparecerá aquí.
           </p>
         </div>
+      ) : filteredOrders.length === 0 ? (
+        <div className="bg-[#15181e] border border-slate-800 rounded-2xl p-10 text-center text-slate-400">
+          No se encontraron pedidos que coincidan con tu búsqueda o filtro.
+        </div>
       ) : (
         <div className="space-y-4">
-          {orders.map((order) => (
+          {filteredOrders.map((order) => (
+            // ... (el mismo mapeo de pedidos que ya tenías)
             <div
               key={order.id}
               className="bg-[#15181e] border border-slate-800 rounded-2xl overflow-hidden"

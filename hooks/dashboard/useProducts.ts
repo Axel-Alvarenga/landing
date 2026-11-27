@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -17,12 +16,7 @@ interface UseProductsArgs {
   showToast: ShowToast;
 }
 
-const EMPTY_PRODUCT = {
-  name: "",
-  price: "",
-  stock: "",
-  category: "",
-};
+const EMPTY_PRODUCT = { name: "", price: "", stock: "", category: "" };
 
 export function useProducts({
   store,
@@ -31,137 +25,83 @@ export function useProducts({
   customFields,
   showToast,
 }: UseProductsArgs) {
-  const { showConfirm, showAlert } = useDialog();
-
+  const { showConfirm } = useDialog();
   const [newProduct, setNewProduct] = useState(EMPTY_PRODUCT);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [isAdding, setIsAdding] = useState(false);
   const [editingProductId, setEditingProductId] = useState<string | null>(null);
   const [editImageUrl, setEditImageUrl] = useState("");
-  const [customFieldValues, setCustomFieldValues] = useState<
-    Record<string, string>
-  >({});
-
-  // ==========================================
-  // REINICIAR FORMULARIO
-  // ==========================================
+  const [customFieldValues, setCustomFieldValues] = useState<Record<string, string>>({});
+  
+  const [isUpdatingStock, setIsUpdatingStock] = useState<string | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
 
   const resetForm = () => {
     setNewProduct(EMPTY_PRODUCT);
     setImageFile(null);
     setEditImageUrl("");
-    setEditingProductId(null);
+    setEditingProductId(null); // 👈 Aseguramos que se limpie
     setCustomFieldValues({});
     setIsAdding(false);
   };
 
-  // ==========================================
-  // EDITAR PRODUCTO
-  // ==========================================
-
   const handleEditClick = (product: any) => {
     setEditingProductId(product.id);
-
     setNewProduct({
       name: product.name,
       price: product.price.toString(),
       stock: product.stock.toString(),
       category: product.category || "",
     });
-
     setEditImageUrl(product.imageUrl || "");
     setImageFile(null);
-
     const existingValues: Record<string, string> = {};
-
     (product.customFieldValues || []).forEach((item: any) => {
       existingValues[item.fieldId] = item.value ?? "";
     });
-
     setCustomFieldValues(existingValues);
     setIsAdding(true);
   };
 
-  // ==========================================
-  // CREAR / ACTUALIZAR PRODUCTO
-  // ==========================================
-
   const handleSaveProduct = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (isUploading) return;
-
-    if (!store) {
-      showAlert(
-        "Error",
-        "No se pudo identificar tu tienda."
-      );
-      return;
-    }
-
-    if (!newProduct.name.trim() || !newProduct.price) {
-      showAlert(
-        "Datos incompletos",
-        "Ingresá el nombre y el precio del producto."
-      );
-      return;
-    }
+    if (!newProduct.name || !newProduct.price || !store) return;
 
     setIsUploading(true);
-
     let finalImageUrl = editingProductId ? editImageUrl : "";
 
     try {
-      // Subir imagen si existe
       if (imageFile) {
-        const resizedBlob = await resizeImage(
-          imageFile,
-          800,
-          800
-        );
-
+        const resizedBlob = await resizeImage(imageFile, 800, 800);
         const filePath = `${store.id}/${Math.random()}.jpg`;
 
         const { error: uploadError } = await supabase.storage
           .from("product-images")
-          .upload(filePath, resizedBlob, {
-            contentType: "image/jpeg",
-          });
+          .upload(filePath, resizedBlob, { contentType: "image/jpeg" });
 
         if (uploadError) throw uploadError;
 
         const {
           data: { publicUrl },
-        } = supabase.storage
-          .from("product-images")
-          .getPublicUrl(filePath);
-
+        } = supabase.storage.from("product-images").getPublicUrl(filePath);
         finalImageUrl = publicUrl;
       }
 
       const isEditing = !!editingProductId;
-
-      const url = isEditing
-        ? `/api/products/${editingProductId}`
-        : "/api/products";
-
+      // 👇 Construcción segura de la URL y el método
+      const url = isEditing ? `/api/products/${editingProductId}` : "/api/products";
       const method = isEditing ? "PUT" : "POST";
 
-      // Obtener sesión
       const {
         data: { session },
       } = await supabase.auth.getSession();
 
       if (!session) {
-        showAlert(
-          "Sesión expirada",
-          "Tu sesión expiró. Volvé a iniciar sesión para continuar."
-        );
+        showToast("Tu sesión expiró. Volvé a iniciar sesión.", "error");
         return;
       }
 
-      // Enviar producto al backend
       const res = await fetch(url, {
         method,
         headers: {
@@ -185,67 +125,37 @@ export function useProducts({
         }),
       });
 
-      const errorData = !res.ok
-        ? await res.json().catch(() => null)
-        : null;
-
-      if (!res.ok) {
-        throw new Error(
-          errorData?.error || "No se pudo guardar el producto."
-        );
-      }
-
-      const savedProduct = await res.json();
-
-      // Actualizar productos sin utilizar estado desactualizado
-      if (isEditing) {
-        setProducts((previous) =>
-          previous.map((p) =>
-            p.id === editingProductId ? savedProduct : p
-          )
-        );
-
-        showToast("Producto actualizado correctamente.", "success");
+      if (res.ok) {
+        const savedProduct = await res.json();
+        if (isEditing) {
+          setProducts(
+            products.map((p) => (p.id === editingProductId ? savedProduct : p))
+          );
+          showToast("Producto actualizado");
+        } else {
+          setProducts([savedProduct, ...products]);
+          showToast("Producto creado");
+        }
+        resetForm();
       } else {
-        setProducts((previous) => [
-          savedProduct,
-          ...previous,
-        ]);
-
-        showToast("Producto creado correctamente.", "success");
+        const errorData = await res.json().catch(() => null);
+        console.error("Error guardando producto:", errorData);
+        showToast(errorData?.error || "Error al guardar", "error");
       }
-
-      resetForm();
-
     } catch (error) {
-      console.error("Error guardando producto:", error);
-
-      showAlert(
-        "Error al guardar producto",
-        error instanceof Error
-          ? error.message
-          : "Ocurrió un error al procesar la imagen o guardar el producto."
-      );
-
+      console.error(error);
+      showToast("Error al procesar la imagen o guardar el producto", "error");
     } finally {
       setIsUploading(false);
     }
   };
 
-  // ==========================================
-  // ELIMINAR PRODUCTO
-  // ==========================================
-
-  const handleDeleteProduct = (id: string) => {
+  const handleDeleteProduct = async (id: string) => {
     showConfirm({
       title: "¿Eliminar producto?",
-
-      message:
-        "Esta acción no se puede deshacer. El producto desaparecerá de tu catálogo.",
-
+      message: "Esta acción no se puede deshacer. El producto desaparecerá de tu catálogo.",
       confirmText: "Sí, eliminar",
       cancelText: "Cancelar",
-
       onConfirm: async () => {
         try {
           const {
@@ -253,47 +163,137 @@ export function useProducts({
           } = await supabase.auth.getSession();
 
           if (!session) {
-            showAlert(
-              "Sesión expirada",
-              "Tu sesión expiró. Volvé a iniciar sesión."
-            );
+            showToast("Tu sesión expiró. Volvé a iniciar sesión.", "error");
             return;
           }
 
           const res = await fetch(`/api/products/${id}`, {
             method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${session.access_token}`,
-            },
+            headers: { Authorization: `Bearer ${session.access_token}` },
           });
 
-          const data = await res.json().catch(() => null);
-
-          if (!res.ok) {
-            throw new Error(
-              data?.error || "No se pudo eliminar el producto."
-            );
+          if (res.ok) {
+            setProducts(products.filter((p) => p.id !== id));
+            showToast("Producto eliminado");
+          } else {
+            const errorData = await res.json().catch(() => null);
+            showToast(errorData?.error || "No se pudo eliminar el producto", "error");
           }
-
-          // Eliminar de la lista sin utilizar estado desactualizado
-          setProducts((previous) =>
-            previous.filter((p) => p.id !== id)
-          );
-
-          showToast("Producto eliminado correctamente.", "success");
-
         } catch (error) {
-          console.error("Error al eliminar producto:", error);
-
-          showAlert(
-            "Error al eliminar producto",
-            error instanceof Error
-              ? error.message
-              : "Ocurrió un error inesperado."
-          );
+          console.error(error);
+          showToast("Error al eliminar el producto", "error");
         }
-      },
+      }
     });
+  };
+
+  const handleQuickStockUpdate = async (productId: string, delta: number) => {
+    setIsUpdatingStock(productId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sesión expirada");
+
+      const res = await fetch(`/api/products/${productId}/stock`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ delta })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al actualizar stock");
+
+      setProducts((prev) =>
+        prev.map((p) => (p.id === productId ? { ...p, stock: data.stock } : p))
+      );
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : "Error al actualizar stock", "error");
+    } finally {
+      setIsUpdatingStock(null);
+    }
+  };
+
+  const handleImportCSV = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !store) return;
+
+    setIsImporting(true);
+    try {
+      const text = await file.text();
+      
+      const lines = text.split("\n").map(line => line.trim()).filter(Boolean);
+      const headers = lines[0].toLowerCase().split(",");
+      
+      const nameIndex = headers.findIndex(h => h.includes("nombre"));
+      const priceIndex = headers.findIndex(h => h.includes("precio"));
+      const stockIndex = headers.findIndex(h => h.includes("stock"));
+      const catIndex = headers.findIndex(h => h.includes("categoria"));
+
+      if (nameIndex === -1 || priceIndex === -1) {
+        throw new Error("El CSV debe tener al menos las columnas 'nombre' y 'precio'.");
+      }
+
+      const newProducts = [];
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(",");
+        
+        if (!cols[nameIndex] || !cols[priceIndex]) continue;
+
+        const productData: any = {
+          name: cols[nameIndex].replace(/^"|"$/g, '').trim(),
+          price: Number(cols[priceIndex].replace(/[^0-9.-]+/g, "")),
+          stock: stockIndex !== -1 ? Number(cols[stockIndex]) || 0 : 0,
+          category: catIndex !== -1 ? cols[catIndex].replace(/^"|"$/g, '').trim() : "General",
+          customFields: {}
+        };
+
+        headers.forEach((header, index) => {
+          if (["nombre", "precio", "stock", "categoria"].includes(header)) return;
+          
+          if (cols[index]) {
+            productData.customFields[header.trim()] = cols[index].replace(/^"|"$/g, '').trim();
+          }
+        });
+
+        newProducts.push(productData);
+      }
+
+      if (newProducts.length === 0) throw new Error("No se encontraron productos válidos en el archivo.");
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error("Sesión expirada");
+
+      const res = await fetch("/api/products/import", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`
+        },
+        body: JSON.stringify({ storeId: store.id, products: newProducts })
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Error al importar");
+
+      const storeRes = await fetch("/api/stores/me", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+        cache: "no-store"
+      });
+      if (storeRes.ok) {
+        const storeData = await storeRes.json();
+        setProducts(storeData.products || []);
+      }
+
+      showToast(`¡${data.count} productos importados con éxito!`);
+    } catch (error) {
+      console.error(error);
+      showToast(error instanceof Error ? error.message : "Error al procesar el CSV", "error");
+    } finally {
+      setIsImporting(false);
+      e.target.value = "";
+    }
   };
 
   return {
@@ -312,5 +312,9 @@ export function useProducts({
     handleEditClick,
     handleSaveProduct,
     handleDeleteProduct,
+    handleQuickStockUpdate,
+    isUpdatingStock,
+    handleImportCSV,
+    isImporting
   };
 }
